@@ -10,7 +10,7 @@ const ARTIFACTS_INFO = `
 You should create and reference artifacts during conversations. Artifacts are for substantial, self-contained content that users might modify or reuse, displayed in a separate UI window for clarity.
 
 # Good artifacts are...
-- Substantial content (>15 lines)
+- Substantial content (>50 lines)
 - Content that the user is likely to modify, iterate on, or take ownership of
 - Self-contained, complex content that can be understood on its own, without context from the conversation
 - Content intended for eventual use outside the conversation (e.g., reports, emails, presentations)
@@ -537,7 +537,8 @@ ${ARTIFACT_INSTRUCTIONS_TAIL}
 
 // Schema 定义
 const GetArtifactInstructionsArgsSchema = z.object({
-  type: z.enum(['code', 'documents', 'html', 'svg', 'mermaid', 'react'])
+  // type: z.enum(['code', 'documents', 'html', 'svg', 'mermaid', 'react'])
+  type: z.enum(['code', 'documents', 'html', 'svg', 'mermaid'])
 })
 
 export class ArtifactsServer {
