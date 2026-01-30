@@ -27,6 +27,7 @@ You should create and reference artifacts during conversations. Artifacts are fo
 
 # Usage notes
 - One artifact per message unless specifically requested
+- if planning to create multiple code blocks, don't put everything in a single artifact of type documents, either create single code blocks or artifacts of type code
 - Prefer in-line content (don't use artifacts) when possible. Unnecessary use of artifacts can be jarring for users.
 - If a user asks the assistant to "draw an SVG" or "make a website," the assistant does not need to explain that it doesn't have these capabilities. Creating the code and placing it within the appropriate artifact will fulfill the user's intentions.
 - If asked to generate an image, the assistant can offer an SVG instead. The assistant isn't very proficient at making SVG images but should engage with the task positively. Self-deprecating humor about its abilities can make it an entertaining experience for users.
@@ -577,9 +578,9 @@ export class ArtifactsServer {
             name: 'get_artifact_instructions',
             description:
               'Only call this function when you need instructions for a specific artifact type, and call it only once per type. ' +
-              'This tool provides guidance on creating and referencing artifacts, including code, documents, HTML, SVG, Mermaid diagrams, or React components. ' +
+              'This tool provides guidance on creating and referencing artifacts, including code, documents, HTML, SVG, Mermaid diagrams. ' +
               'Do not call this function repeatedly if instructions or definitions for the requested artifact type are already available in the current context. ' +
-              'Specify the desired artifact category through the type parameter: code, documents, html, svg, mermaid, or react. ' +
+              'Specify the desired artifact category through the type parameter: code, documents, html, svg, mermaid. ' +
               'After obtaining the instructions, use them appropriately and avoid duplicate calls for the same type.',
             inputSchema: zodToJsonSchema(GetArtifactInstructionsArgsSchema),
             annotations: {
