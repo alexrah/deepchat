@@ -3,7 +3,14 @@ import { eventBus } from '@/eventbus'
 import { WINDOW_EVENTS, CONFIG_EVENTS, SYSTEM_EVENTS, TAB_EVENTS } from '@/events'
 import { is } from '@electron-toolkit/utils'
 import { ITabPresenter, TabCreateOptions, IWindowPresenter, TabData } from '@shared/presenter'
-import { BrowserWindow, WebContentsView, shell, nativeImage, type WebPreferences } from 'electron'
+import {
+  BrowserWindow,
+  WebContentsView,
+  shell,
+  nativeImage,
+  webContents as electronWebContents,
+  type WebPreferences
+} from 'electron'
 import { join } from 'path'
 import contextMenu from '@/contextMenuHelper'
 import { getContextMenuLabels } from '@shared/i18n'
@@ -66,19 +73,6 @@ export class TabPresenter implements ITabPresenter {
     })
   }
 
-  setTabBrowserId(tabId: number, browserTabId: string): void {
-    const state = this.tabState.get(tabId)
-    if (state) {
-      state.browserTabId = browserTabId
-      const windowId = this.tabWindowMap.get(tabId)
-      if (windowId !== undefined) {
-        this.notifyWindowTabsUpdate(windowId).catch((error) => {
-          console.warn(`Failed to sync browser tab id for window ${windowId}:`, error)
-        })
-      }
-    }
-  }
-
   private onWindowSizeChange(windowId: number) {
     const views = this.windowTabs.get(windowId)
     const window = BrowserWindow.fromId(windowId)
@@ -117,6 +111,10 @@ export class TabPresenter implements ITabPresenter {
           const view = this.tabs.get(viewId)
           if (view) {
             this.detachViewFromWindow(window, view)
+          }
+          const conversationId = presenter.getActiveConversationIdSync(viewId)
+          if (conversationId) {
+            void presenter.cleanupConversationRuntimeArtifacts(conversationId)
           }
         })
       }
@@ -627,15 +625,6 @@ export class TabPresenter implements ITabPresenter {
   ): void {
     // 处理外部链接
     webContents.setWindowOpenHandler(({ url }) => {
-      const state = this.tabState.get(tabId)
-      // 如果是 browser tab，在当前 tab 导航
-      if (state?.browserTabId) {
-        presenter.yoBrowserPresenter.navigateTab(state.browserTabId, url).catch((error: Error) => {
-          console.error(`[TabPresenter] Failed to navigate browser tab:`, error)
-        })
-        return { action: 'deny' }
-      }
-      // Chat tab: 使用系统默认浏览器打开链接
       shell.openExternal(url)
       return { action: 'deny' }
     })
@@ -924,7 +913,17 @@ export class TabPresenter implements ITabPresenter {
       newWindowOptions.y = screenY
     }
 
-    const newWindowId = await this.windowPresenter.createShellWindow(newWindowOptions)
+    const newWindowId =
+      sourceWindowType === 'browser'
+        ? await this.windowPresenter.createBrowserWindow({
+            x: newWindowOptions.x,
+            y: newWindowOptions.y
+          })
+        : await this.windowPresenter.createAppWindow({
+            initialRoute: 'chat',
+            x: newWindowOptions.x,
+            y: newWindowOptions.y
+          })
 
     if (newWindowId === null) {
       console.error('moveTabToNewWindow: Failed to create a new window.')
@@ -967,14 +966,43 @@ export class TabPresenter implements ITabPresenter {
     rect: { x: number; y: number; width: number; height: number }
   ): Promise<string | null> {
     try {
-      const view = this.tabs.get(tabId)
-      if (!view || view.webContents.isDestroyed()) {
+      let targetWebContents: Electron.WebContents | null = null
+
+      const tabView = this.tabs.get(tabId)
+      if (tabView && !tabView.webContents.isDestroyed()) {
+        targetWebContents = tabView.webContents
+      } else {
+        const directWebContents = electronWebContents.fromId(tabId)
+        if (directWebContents && !directWebContents.isDestroyed()) {
+          targetWebContents = directWebContents
+        }
+      }
+
+      // Fallback: some callers may pass windowId. Capture active tab in that window.
+      if (!targetWebContents) {
+        const window = BrowserWindow.fromId(tabId)
+        if (window && !window.isDestroyed()) {
+          const activeTabId = await this.getActiveTabId(window.id)
+          if (activeTabId) {
+            const activeView = this.tabs.get(activeTabId)
+            if (activeView && !activeView.webContents.isDestroyed()) {
+              targetWebContents = activeView.webContents
+            }
+          }
+
+          if (!targetWebContents && !window.webContents.isDestroyed()) {
+            targetWebContents = window.webContents
+          }
+        }
+      }
+
+      if (!targetWebContents || targetWebContents.isDestroyed()) {
         console.error(`captureTabArea: Tab ${tabId} not found or destroyed`)
         return null
       }
 
       // 使用Electron的capturePage API进行截图
-      const image = await view.webContents.capturePage(rect)
+      const image = await targetWebContents.capturePage(rect)
 
       if (image.isEmpty()) {
         console.error('Capture tab area: Captured image is empty')

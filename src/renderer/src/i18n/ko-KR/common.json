@@ -21,6 +21,7 @@
   "disabled": "비활성화",
   "disclaimer": "면책 조항",
   "close": "닫기",
+  "open": "열기",
   "error": {
     "requestFailed": "요청 실패...",
     "createChatFailed": "채팅 생성 실패",
@@ -43,7 +44,8 @@
     "error502": "게이트웨이 오류, 요청 된 서비스는 현재 안정적이지 않을 수 있습니다. 나중에 다시 시도 할 수 있습니다.",
     "error503": "서비스를 사용할 수없고 요청 된 서비스는 현재 불안정 할 수 있습니다. 나중에 시도해 볼 수 있습니다.",
     "error504": "요청 시간이 초과되었습니다. 서비스가 불안정하거나 네트워크에 문제가 있을 수 있습니다. 프록시 등 네트워크 설정을 확인 후 다시 시도해 주세요.",
-    "operationFailed": "작업 실패"
+    "operationFailed": "작업 실패",
+    "invalidQuestionRequest": "유효하지 않은 질문 요청"
   },
   "resetDataConfirmTitle": "모든 데이터 초기화?",
   "resetDataConfirmDescription": "이렇게 하면 모든 데이터가 기본 설정으로 초기화됩니다. 이 작업은 취소할 수 없습니다.",
@@ -77,7 +79,6 @@
   "save": "저장",
   "clear": "지우기",
   "saved": "저장",
-  "newTab": "새 탭",
   "unknownError": "알 수 없는 오류",
   "testing": "테스트 중",
   "saving": "저장 중",
@@ -91,9 +92,25 @@
     "back": "뒤로",
     "forward": "앞으로",
     "reload": "새로고침",
+    "addressLabel": "주소 표시줄",
     "addressPlaceholder": "URL을 입력하세요",
     "enterUrlDescription": "위 주소창에 URL을 입력하시면 해당 홈페이지에 접속하실 수 있습니다.",
     "enterUrlToStart": "방문을 시작하려면 URL을 입력하세요.",
     "name": "요 브라우저"
+  },
+  "size": {
+    "bytes": "{count} 바이트"
+  },
+  "time": {
+    "today": "오늘",
+    "yesterday": "어제",
+    "lastWeek": "지난 주",
+    "older": "이전"
+  },
+  "project": {
+    "select": "프로젝트 선택",
+    "none": "프로젝트 없음",
+    "recent": "최근 프로젝트",
+    "openFolder": "폴더 열기..."
   }
 }

@@ -8,6 +8,7 @@ import {
   ChatMessage,
   IConfigPresenter
 } from '@shared/presenter'
+import { DEFAULT_MODEL_CONTEXT_LENGTH, DEFAULT_MODEL_MAX_TOKENS } from '@shared/modelConfigDefaults'
 import { createStreamEvent } from '@shared/types/core/llm-events'
 import { BaseLLMProvider, SUMMARY_TITLES_PROMPT } from '../baseProvider'
 import OpenAI, { AzureOpenAI } from 'openai'
@@ -22,6 +23,8 @@ import sharp from 'sharp'
 import { proxyConfig } from '../../proxyConfig'
 import { ProxyAgent } from 'undici'
 import { modelCapabilities } from '../../configPresenter/modelCapabilities'
+import type { ProviderMcpRuntimePort } from '../runtimePorts'
+import { applyOpenAIPromptCacheKey, resolvePromptCachePlan } from '../promptCacheStrategy'
 
 const OPENAI_REASONING_MODELS = [
   'o4-mini',
@@ -55,14 +58,54 @@ const SUPPORTED_IMAGE_SIZES = {
 // 添加可设置尺寸的模型列表
 const SIZE_CONFIGURABLE_MODELS = ['gpt-image-1', 'gpt-4o-image', 'gpt-4o-all']
 
+function getOpenAIResponseCachedTokens(
+  usage:
+    | {
+        input_tokens_details?: {
+          cached_tokens?: number
+          cache_write_tokens?: number
+        }
+        cache_write_tokens?: number
+      }
+    | null
+    | undefined
+): number | undefined {
+  const cachedTokens = usage?.input_tokens_details?.cached_tokens
+  return typeof cachedTokens === 'number' && Number.isFinite(cachedTokens)
+    ? cachedTokens
+    : undefined
+}
+
+function getOpenAIResponseCacheWriteTokens(usage: unknown): number | undefined {
+  if (!usage || typeof usage !== 'object') {
+    return undefined
+  }
+
+  const inputTokensDetails = (usage as { input_tokens_details?: unknown }).input_tokens_details
+  const nestedCacheWriteTokens =
+    inputTokensDetails && typeof inputTokensDetails === 'object'
+      ? (inputTokensDetails as Record<string, unknown>).cache_write_tokens
+      : undefined
+  const topLevelCacheWriteTokens = (usage as Record<string, unknown>).cache_write_tokens
+  const cacheWriteTokens =
+    typeof nestedCacheWriteTokens === 'number' ? nestedCacheWriteTokens : topLevelCacheWriteTokens
+  return typeof cacheWriteTokens === 'number' && Number.isFinite(cacheWriteTokens)
+    ? cacheWriteTokens
+    : undefined
+}
+
 export class OpenAIResponsesProvider extends BaseLLMProvider {
   protected openai!: OpenAI
   private isNoModelsApi: boolean = false
   // 添加不支持 OpenAI 标准接口的供应商黑名单
   private static readonly NO_MODELS_API_LIST: string[] = []
 
-  constructor(provider: LLM_PROVIDER, configPresenter: IConfigPresenter) {
-    super(provider, configPresenter)
+  constructor(
+    provider: LLM_PROVIDER,
+    configPresenter: IConfigPresenter,
+    mcpRuntime?: ProviderMcpRuntimePort
+  ) {
+    super(provider, configPresenter, mcpRuntime)
     this.createOpenAIClient()
     if (OpenAIResponsesProvider.NO_MODELS_API_LIST.includes(this.provider.id.toLowerCase())) {
       this.isNoModelsApi = true
@@ -76,6 +119,30 @@ export class OpenAIResponsesProvider extends BaseLLMProvider {
 
   private supportsVerbosityParameter(modelId: string): boolean {
     return modelCapabilities.supportsVerbosity(this.provider.id, modelId)
+  }
+
+  private resolveTraceAuthToken(): string {
+    return this.provider.oauthToken || this.provider.apiKey || 'MISSING_API_KEY'
+  }
+
+  private buildResponsesTraceHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...this.defaultHeaders
+    }
+
+    if (this.provider.id === 'azure-openai') {
+      headers['api-key'] = this.resolveTraceAuthToken()
+    } else {
+      headers.Authorization = `Bearer ${this.resolveTraceAuthToken()}`
+    }
+
+    return headers
+  }
+
+  private buildResponsesEndpoint(): string {
+    const baseUrl = (this.provider.baseUrl || 'https://api.openai.com/v1').replace(/\/+$/, '')
+    return `${baseUrl}/responses`
   }
 
   private createOpenAIClient(): void {
@@ -138,8 +205,8 @@ export class OpenAIResponsesProvider extends BaseLLMProvider {
       group: 'default',
       providerId: this.provider.id,
       isCustom: false,
-      contextLength: 4096,
-      maxTokens: 2048
+      contextLength: DEFAULT_MODEL_CONTEXT_LENGTH,
+      maxTokens: DEFAULT_MODEL_MAX_TOKENS
     }))
   }
 
@@ -174,21 +241,33 @@ export class OpenAIResponsesProvider extends BaseLLMProvider {
         continue
       }
 
+      if (msg.role === 'assistant') {
+        const assistantContent = this.flattenAssistantContent(msg.content)
+        if (!assistantContent) {
+          continue
+        }
+
+        // Responses API assistant history does not accept input_text content parts.
+        result.push({
+          role: 'assistant',
+          content: assistantContent
+        })
+        continue
+      }
+
       const content: OpenAI.Responses.ResponseInputMessageContentList = []
 
       if (msg.content !== undefined) {
         if (typeof msg.content === 'string') {
           content.push({
-            //@ts-ignore api 和 sdk 定义不同
-            type: msg.role === 'assistant' ? 'output_text' : 'input_text',
+            type: 'input_text',
             text: msg.content
           })
         } else if (Array.isArray(msg.content)) {
           for (const part of msg.content) {
             if (part.type === 'text' && part.text) {
               content.push({
-                //@ts-ignore api 和 sdk 定义不同
-                type: msg.role === 'assistant' ? 'output_text' : 'input_text',
+                type: 'input_text',
                 text: part.text
               })
             }
@@ -212,6 +291,25 @@ export class OpenAIResponsesProvider extends BaseLLMProvider {
     return result
   }
 
+  private flattenAssistantContent(content: ChatMessage['content']): string | null {
+    if (typeof content === 'string') {
+      return content.length > 0 ? content : null
+    }
+
+    if (!Array.isArray(content)) {
+      return null
+    }
+
+    const textContent = content.reduce((result, part) => {
+      if (part.type !== 'text' || part.text.length === 0) {
+        return result
+      }
+      return `${result}${part.text}`
+    }, '')
+
+    return textContent.length > 0 ? textContent : null
+  }
+
   // OpenAI完成方法
   protected async openAICompletion(
     messages: ChatMessage[],
@@ -228,7 +326,7 @@ export class OpenAIResponsesProvider extends BaseLLMProvider {
     }
 
     const formattedMessages = this.formatMessages(messages)
-    const requestParams: OpenAI.Responses.ResponseCreateParams = {
+    const requestParams: OpenAI.Responses.ResponseCreateParamsNonStreaming = {
       model: modelId,
       input: formattedMessages,
       temperature: temperature,
@@ -237,6 +335,13 @@ export class OpenAIResponsesProvider extends BaseLLMProvider {
     }
 
     const modelConfig = this.configPresenter.getModelConfig(modelId, this.provider.id)
+    const promptCachePlan = resolvePromptCachePlan({
+      providerId: this.provider.id,
+      apiType: 'openai_responses',
+      modelId,
+      messages: formattedMessages as unknown[],
+      conversationId: modelConfig?.conversationId
+    })
     if (modelConfig.reasoningEffort && this.supportsEffortParameter(modelId)) {
       ;(requestParams as any).reasoning = {
         effort: modelConfig.reasoningEffort
@@ -256,19 +361,19 @@ export class OpenAIResponsesProvider extends BaseLLMProvider {
       }
     })
 
-    const response = await this.openai.responses.create(requestParams)
+    const cachedRequestParams = applyOpenAIPromptCacheKey(
+      requestParams as unknown as Record<string, unknown>,
+      promptCachePlan
+    ) as unknown as OpenAI.Responses.ResponseCreateParamsNonStreaming
+
+    const response = await this.openai.responses.create(cachedRequestParams)
     const resultResp: LLMResponse = {
       content: ''
     }
 
-    if (response.status === 'completed' && response.output.length > 0) {
-      const message = response.output[0]
-      if (message.type === 'message' && message.content) {
-        const textContent = message.content.find((content) => content.type === 'output_text')
-        if (textContent && 'text' in textContent) {
-          resultResp.content = textContent.text
-        }
-      }
+    // Use the SDK-provided aggregated assistant text for Responses API.
+    if (typeof response.output_text === 'string') {
+      resultResp.content = response.output_text
     }
 
     // 处理 reasoning 内容
@@ -498,7 +603,9 @@ export class OpenAIResponsesProvider extends BaseLLMProvider {
             yield createStreamEvent.usage({
               prompt_tokens: result.usage.input_tokens || 0,
               completion_tokens: result.usage.output_tokens || 0,
-              total_tokens: result.usage.total_tokens || 0
+              total_tokens: result.usage.total_tokens || 0,
+              cached_tokens: getOpenAIResponseCachedTokens(result.usage),
+              cache_write_tokens: getOpenAIResponseCacheWriteTokens(result.usage)
             })
           }
 
@@ -555,16 +662,24 @@ export class OpenAIResponsesProvider extends BaseLLMProvider {
     }
     const apiTools =
       tools.length > 0 && supportsFunctionCall
-        ? await presenter.mcpPresenter.mcpToolsToOpenAIResponsesTools(tools, this.provider.id)
+        ? await this.mcpRuntime?.mcpToolsToOpenAIResponsesTools(tools, this.provider.id)
         : undefined
 
-    const requestParams: OpenAI.Responses.ResponseCreateParams = {
+    const requestParams: OpenAI.Responses.ResponseCreateParamsStreaming = {
       model: modelId,
       input: processedMessages,
       temperature,
       max_output_tokens: maxTokens,
       stream: true
     }
+    const promptCachePlan = resolvePromptCachePlan({
+      providerId: this.provider.id,
+      apiType: 'openai_responses',
+      modelId,
+      messages: processedMessages as unknown[],
+      tools,
+      conversationId: modelConfig?.conversationId
+    })
 
     // 如果模型支持函数调用且有工具,添加 tools 参数
     if (tools.length > 0 && supportsFunctionCall && apiTools) {
@@ -587,7 +702,18 @@ export class OpenAIResponsesProvider extends BaseLLMProvider {
       if (modelId.startsWith(noTempId)) delete requestParams.temperature
     })
 
-    const stream = await this.openai.responses.create(requestParams)
+    const cachedRequestParams = applyOpenAIPromptCacheKey(
+      requestParams as unknown as Record<string, unknown>,
+      promptCachePlan
+    ) as unknown as OpenAI.Responses.ResponseCreateParamsStreaming
+
+    await this.emitRequestTrace(modelConfig, {
+      endpoint: this.buildResponsesEndpoint(),
+      headers: this.buildResponsesTraceHeaders(),
+      body: cachedRequestParams
+    })
+
+    const stream = await this.openai.responses.create(cachedRequestParams)
 
     // --- State Variables ---
     type TagState = 'none' | 'start' | 'inside' | 'end'
@@ -605,8 +731,10 @@ export class OpenAIResponsesProvider extends BaseLLMProvider {
 
     const nativeToolCalls: Record<
       string,
-      { name: string; arguments: string; completed?: boolean }
+      { name: string; arguments: string; completed?: boolean; itemId?: string }
     > = {}
+    const nativeToolCallIdByItemId: Record<string, string> = {}
+    const nativeToolCallIdByOutputIndex: Record<number, string> = {}
     const stopReason: LLMCoreStreamEvent['stop_reason'] = 'complete'
     let toolUseDetected = false
     let usage:
@@ -614,6 +742,8 @@ export class OpenAIResponsesProvider extends BaseLLMProvider {
           prompt_tokens: number
           completion_tokens: number
           total_tokens: number
+          cached_tokens?: number
+          cache_write_tokens?: number
         }
       | undefined = undefined
 
@@ -625,16 +755,21 @@ export class OpenAIResponsesProvider extends BaseLLMProvider {
           const item = chunk.item
           if (item.type === 'function_call') {
             toolUseDetected = true
-            const id = item.call_id
-            if (id) {
-              nativeToolCalls[id] = {
+            const callId = item.call_id
+            if (callId) {
+              nativeToolCalls[callId] = {
                 name: item.name,
                 arguments: item.arguments || '',
-                completed: false
+                completed: false,
+                itemId: item.id
+              }
+              nativeToolCallIdByOutputIndex[chunk.output_index] = callId
+              if (item.id) {
+                nativeToolCallIdByItemId[item.id] = callId
               }
               yield {
                 type: 'tool_call_start',
-                tool_call_id: id,
+                tool_call_id: callId,
                 tool_call_name: item.name
               }
             }
@@ -642,31 +777,45 @@ export class OpenAIResponsesProvider extends BaseLLMProvider {
         } else if (chunk.type === 'response.function_call_arguments.delta') {
           const itemId = chunk.item_id
           const delta = chunk.delta
-          const toolCall = nativeToolCalls[itemId]
+          const callId =
+            nativeToolCallIdByItemId[itemId] || nativeToolCallIdByOutputIndex[chunk.output_index]
+          if (callId && !nativeToolCallIdByItemId[itemId]) {
+            nativeToolCallIdByItemId[itemId] = callId
+          }
+          const toolCall = callId ? nativeToolCalls[callId] : undefined
           if (toolCall) {
             toolCall.arguments += delta
             yield {
               type: 'tool_call_chunk',
-              tool_call_id: itemId,
+              tool_call_id: callId,
               tool_call_arguments_chunk: delta
             }
           }
         } else if (chunk.type === 'response.function_call_arguments.done') {
           const itemId = chunk.item_id
           const argsData = chunk.arguments
-          const toolCall = nativeToolCalls[itemId]
+          const callId =
+            nativeToolCallIdByItemId[itemId] || nativeToolCallIdByOutputIndex[chunk.output_index]
+          if (callId && !nativeToolCallIdByItemId[itemId]) {
+            nativeToolCallIdByItemId[itemId] = callId
+          }
+          const toolCall = callId ? nativeToolCalls[callId] : undefined
           if (toolCall) {
             toolCall.arguments = argsData
             toolCall.completed = true
             yield {
               type: 'tool_call_end',
-              tool_call_id: itemId,
+              tool_call_id: callId,
               tool_call_arguments_complete: argsData
             }
           }
         } else if (chunk.type === 'response.output_item.done') {
           const item = chunk.item
           if (item.type === 'function_call') {
+            nativeToolCallIdByOutputIndex[chunk.output_index] = item.call_id
+            if (item.id) {
+              nativeToolCallIdByItemId[item.id] = item.call_id
+            }
             const toolCall = nativeToolCalls[item.call_id]
             if (toolCall && !toolCall.completed) {
               toolCall.completed = true
@@ -904,7 +1053,9 @@ export class OpenAIResponsesProvider extends BaseLLMProvider {
           usage = {
             prompt_tokens: response.usage.input_tokens || 0,
             completion_tokens: response.usage.output_tokens || 0,
-            total_tokens: response.usage.total_tokens || 0
+            total_tokens: response.usage.total_tokens || 0,
+            cached_tokens: getOpenAIResponseCachedTokens(response.usage),
+            cache_write_tokens: getOpenAIResponseCacheWriteTokens(response.usage)
           }
           yield createStreamEvent.usage(usage)
         }
@@ -1320,74 +1471,6 @@ export class OpenAIResponsesProvider extends BaseLLMProvider {
         response
       )
       return []
-    }
-  }
-
-  /**
-   * Get request preview for debugging (DEV mode only)
-   */
-  public async getRequestPreview(
-    messages: ChatMessage[],
-    modelId: string,
-    modelConfig: ModelConfig,
-    temperature: number,
-    maxTokens: number,
-    mcpTools: MCPToolDefinition[]
-  ): Promise<{
-    endpoint: string
-    headers: Record<string, string>
-    body: unknown
-  }> {
-    const tools = mcpTools || []
-    const supportsFunctionCall = modelConfig?.functionCall || false
-    let processedMessages = this.formatMessages(messages)
-
-    if (tools.length > 0 && !supportsFunctionCall) {
-      processedMessages = this.prepareFunctionCallPrompt(processedMessages, tools)
-    }
-
-    const apiTools =
-      tools.length > 0 && supportsFunctionCall
-        ? await presenter.mcpPresenter.mcpToolsToOpenAIResponsesTools(tools, this.provider.id)
-        : undefined
-
-    const requestParams: OpenAI.Responses.ResponseCreateParams = {
-      model: modelId,
-      input: processedMessages,
-      temperature,
-      max_output_tokens: maxTokens,
-      stream: true
-    }
-
-    if (tools.length > 0 && supportsFunctionCall && apiTools) {
-      requestParams.tools = apiTools
-    }
-
-    if (modelConfig.reasoningEffort && this.supportsEffortParameter(modelId)) {
-      ;(requestParams as any).reasoning = {
-        effort: modelConfig.reasoningEffort
-      }
-    }
-
-    if (modelConfig.verbosity && this.supportsVerbosityParameter(modelId)) {
-      ;(requestParams as any).text = {
-        verbosity: modelConfig.verbosity
-      }
-    }
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${this.provider.apiKey || 'MISSING_API_KEY'}`,
-      ...this.defaultHeaders
-    }
-
-    const baseUrl = this.provider.baseUrl || 'https://api.openai.com/v1'
-    const endpoint = `${baseUrl}/responses`
-
-    return {
-      endpoint,
-      headers,
-      body: requestParams
     }
   }
 }

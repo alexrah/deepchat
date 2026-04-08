@@ -11,11 +11,12 @@ import {
   LLM_EMBEDDING_ATTRS,
   IConfigPresenter
 } from '@shared/presenter'
+import { DEFAULT_MODEL_CONTEXT_LENGTH, DEFAULT_MODEL_MAX_TOKENS } from '@shared/modelConfigDefaults'
 import { createStreamEvent } from '@shared/types/core/llm-events'
 import { BaseLLMProvider, SUMMARY_TITLES_PROMPT } from '../baseProvider'
 import { Ollama, Message, ShowResponse } from 'ollama'
-import { presenter } from '@/presenter'
 import { EMBEDDING_TEST_KEY, isNormalized } from '@/utils/vector'
+import type { ProviderMcpRuntimePort } from '../runtimePorts'
 
 // Define Ollama tool type
 interface OllamaTool {
@@ -39,8 +40,12 @@ interface OllamaTool {
 
 export class OllamaProvider extends BaseLLMProvider {
   private ollama: Ollama
-  constructor(provider: LLM_PROVIDER, configPresenter: IConfigPresenter) {
-    super(provider, configPresenter)
+  constructor(
+    provider: LLM_PROVIDER,
+    configPresenter: IConfigPresenter,
+    mcpRuntime?: ProviderMcpRuntimePort
+  ) {
+    super(provider, configPresenter, mcpRuntime)
     if (this.provider.apiKey) {
       this.ollama = new Ollama({
         host: this.provider.baseUrl,
@@ -52,6 +57,22 @@ export class OllamaProvider extends BaseLLMProvider {
       })
     }
     this.init()
+  }
+
+  private getOllamaBaseUrl(): string {
+    const raw = this.provider.baseUrl?.trim()
+    return raw && raw.length > 0 ? raw.replace(/\/+$/, '') : 'http://localhost:11434'
+  }
+
+  private buildOllamaTraceHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...this.defaultHeaders
+    }
+    if (this.provider.apiKey) {
+      headers.Authorization = `Bearer ${this.provider.apiKey}`
+    }
+    return headers
   }
 
   // Basic Provider functionality implementation
@@ -66,8 +87,8 @@ export class OllamaProvider extends BaseLLMProvider {
         id: model.name,
         name: model.name,
         providerId: this.provider.id,
-        contextLength: 8192, // Default value, can be adjusted based on actual model information
-        maxTokens: 2048, // Add required maxTokens field
+        contextLength: DEFAULT_MODEL_CONTEXT_LENGTH,
+        maxTokens: DEFAULT_MODEL_MAX_TOKENS,
         isCustom: false,
         group: model.details?.family || 'default',
         description: `${model.details?.parameter_size || ''} ${model.details?.family || ''} model`
@@ -327,7 +348,7 @@ export class OllamaProvider extends BaseLLMProvider {
       const showResponse = await this.showModelInfo(model.name)
       const info = showResponse.model_info
       const family = model.details.family
-      const context_length = info?.[family + '.context_length'] ?? 4096
+      const context_length = info?.[family + '.context_length'] ?? DEFAULT_MODEL_CONTEXT_LENGTH
       const embedding_length = info?.[family + '.embedding_length'] ?? 512
       const capabilities = showResponse.capabilities ?? ['chat']
 
@@ -420,10 +441,8 @@ export class OllamaProvider extends BaseLLMProvider {
 
   // 辅助方法：将 MCP 工具转换为 Ollama 工具格式
   private async convertToOllamaTools(mcpTools: MCPToolDefinition[]): Promise<OllamaTool[]> {
-    const openAITools = await presenter.mcpPresenter.mcpToolsToOpenAITools(
-      mcpTools,
-      this.provider.id
-    )
+    const openAITools =
+      (await this.mcpRuntime?.mcpToolsToOpenAITools(mcpTools, this.provider.id)) ?? []
     return openAITools.map((rawTool) => {
       const tool = rawTool as unknown as {
         function: {
@@ -537,6 +556,12 @@ export class OllamaProvider extends BaseLLMProvider {
           ? { tools: ollamaTools }
           : {})
       }
+
+      await this.emitRequestTrace(modelConfig, {
+        endpoint: `${this.getOllamaBaseUrl()}/api/chat`,
+        headers: this.buildOllamaTraceHeaders(),
+        body: chatParams
+      })
 
       // 创建流
       const stream = await this.ollama.chat(chatParams)

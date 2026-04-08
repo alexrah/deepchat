@@ -4,6 +4,14 @@ export type * from './presenters/legacy.presenters'
 export type * from './presenters/agent-provider'
 export type * from './presenters/workspace'
 export type * from './presenters/tool.presenter'
+export type * from '../hooksNotifications'
+export type {
+  ProviderInstallByIdPayload,
+  ProviderInstallByTypePayload,
+  ProviderInstallDeeplinkPayload,
+  ProviderInstallPreview,
+  SupportedProviderInstallCustomType
+} from '../providerDeeplink'
 export * from './browser'
 export * from './chatSettings'
 export * from './skill'

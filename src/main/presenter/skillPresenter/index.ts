@@ -11,11 +11,16 @@ import {
   SkillContent,
   SkillInstallResult,
   SkillFolderNode,
-  SkillInstallOptions
+  SkillInstallOptions,
+  SkillExtensionConfig,
+  SkillRuntimePolicy,
+  SkillScriptDescriptor,
+  SkillScriptRuntime
 } from '@shared/types/skill'
 import { eventBus, SendTarget } from '@/eventbus'
 import { SKILL_EVENTS } from '@/events'
-import { presenter } from '@/presenter'
+import logger from '@shared/logger'
+import { normalizeSkillAllowedTools } from './toolNameMapping'
 
 /**
  * Skill system configuration constants
@@ -35,8 +40,93 @@ export const SKILL_CONFIG = {
 
   /** File watcher debounce settings */
   WATCHER_STABILITY_THRESHOLD: 300, // ms
-  WATCHER_POLL_INTERVAL: 100 // ms
+  WATCHER_POLL_INTERVAL: 100, // ms
+
+  /** Sidecar configuration directory name */
+  SIDECAR_DIR: '.deepchat-meta'
 } as const
+
+const SUPPORTED_SCRIPT_EXTENSIONS: Record<string, SkillScriptRuntime> = {
+  '.py': 'python',
+  '.js': 'node',
+  '.mjs': 'node',
+  '.cjs': 'node',
+  '.sh': 'shell'
+}
+
+const DEFAULT_RUNTIME_POLICY: SkillRuntimePolicy = {
+  python: 'auto',
+  node: 'auto'
+}
+
+export interface SkillSessionStatePort {
+  hasNewSession(conversationId: string): Promise<boolean>
+  getPersistedNewSessionSkills(conversationId: string): string[]
+  setPersistedNewSessionSkills(conversationId: string, skills: string[]): void
+  repairImportedLegacySessionSkills(conversationId: string): Promise<string[]>
+}
+
+function createDefaultSkillExtensionConfig(): SkillExtensionConfig {
+  return {
+    version: 1,
+    env: {},
+    runtimePolicy: { ...DEFAULT_RUNTIME_POLICY },
+    scriptOverrides: {}
+  }
+}
+
+function sanitizeSkillExtensionConfig(input: unknown): SkillExtensionConfig {
+  const fallback = createDefaultSkillExtensionConfig()
+  if (!input || typeof input !== 'object') {
+    return fallback
+  }
+
+  const candidate = input as Partial<SkillExtensionConfig>
+  const env = Object.fromEntries(
+    Object.entries(candidate.env ?? {})
+      .filter(
+        (entry): entry is [string, string] =>
+          typeof entry[0] === 'string' && typeof entry[1] === 'string' && entry[0].trim().length > 0
+      )
+      .map(([key, value]) => [key.trim(), value])
+  )
+
+  const runtimePolicy = (candidate.runtimePolicy ?? {}) as Partial<SkillRuntimePolicy>
+  const python =
+    runtimePolicy.python === 'builtin' || runtimePolicy.python === 'system'
+      ? runtimePolicy.python
+      : 'auto'
+  const node =
+    runtimePolicy.node === 'builtin' || runtimePolicy.node === 'system'
+      ? runtimePolicy.node
+      : 'auto'
+
+  const scriptOverrides = Object.fromEntries(
+    Object.entries(candidate.scriptOverrides ?? {})
+      .filter(([key]) => typeof key === 'string' && key.trim().length > 0)
+      .map(([key, value]) => {
+        const override = value && typeof value === 'object' ? value : {}
+        const next: { enabled?: boolean; description?: string } = {}
+        if (typeof (override as { enabled?: unknown }).enabled === 'boolean') {
+          next.enabled = (override as { enabled: boolean }).enabled
+        }
+        if (typeof (override as { description?: unknown }).description === 'string') {
+          const description = (override as { description: string }).description.trim()
+          if (description) {
+            next.description = description
+          }
+        }
+        return [key.trim(), next]
+      })
+  )
+
+  return {
+    version: 1,
+    env,
+    runtimePolicy: { python, node },
+    scriptOverrides
+  }
+}
 
 /**
  * SkillPresenter - Manages the skills system
@@ -50,26 +140,48 @@ export const SKILL_CONFIG = {
  */
 export class SkillPresenter implements ISkillPresenter {
   private skillsDir: string
+  private sidecarDir: string
   private metadataCache: Map<string, SkillMetadata> = new Map()
   private contentCache: Map<string, SkillContent> = new Map()
   private watcher: FSWatcher | null = null
   private initialized: boolean = false
   // Prevent concurrent discovery calls (race condition protection)
   private discoveryPromise: Promise<SkillMetadata[]> | null = null
+  private legacySkillRetirementWarnings: Set<string> = new Set()
 
-  constructor(private readonly configPresenter: IConfigPresenter) {
+  constructor(
+    private readonly configPresenter: IConfigPresenter,
+    private readonly sessionStatePort: SkillSessionStatePort
+  ) {
     // Skills directory: ~/.deepchat/skills/
     this.skillsDir = this.resolveSkillsDir()
+    this.sidecarDir = path.join(this.skillsDir, SKILL_CONFIG.SIDECAR_DIR)
     this.ensureSkillsDir()
   }
 
   private resolveSkillsDir(): string {
     const configuredPath = this.configPresenter.getSkillsPath()
     const normalized = configuredPath?.trim()
-    if (normalized) {
-      return path.resolve(normalized)
+    const homePath = app.getPath('home')
+    const homeDir = homePath ? path.resolve(homePath) : path.resolve('.')
+    const fallbackDir = path.join(homeDir, '.deepchat', 'skills')
+    const resolved = normalized ? path.resolve(normalized) : fallbackDir
+
+    // Repair malformed paths like: C:\Users\name.deepchat\skills
+    const brokenPrefix = `${homeDir}.deepchat`
+    const compareResolved = process.platform === 'win32' ? resolved.toLowerCase() : resolved
+    const compareBrokenPrefix =
+      process.platform === 'win32' ? brokenPrefix.toLowerCase() : brokenPrefix
+    const hasBrokenPrefix = compareResolved.startsWith(compareBrokenPrefix)
+    const nextChar = compareResolved.charAt(compareBrokenPrefix.length)
+    const hasBoundaryAfterPrefix =
+      compareResolved.length === compareBrokenPrefix.length || nextChar === '/' || nextChar === '\\'
+    if (hasBrokenPrefix && hasBoundaryAfterPrefix) {
+      const suffix = resolved.slice(brokenPrefix.length).replace(/^[\\/]+/, '')
+      return path.join(homeDir, '.deepchat', suffix)
     }
-    return path.join(app.getPath('home'), '.deepchat', 'skills')
+
+    return resolved
   }
 
   /**
@@ -78,6 +190,9 @@ export class SkillPresenter implements ISkillPresenter {
   private ensureSkillsDir(): void {
     if (!fs.existsSync(this.skillsDir)) {
       fs.mkdirSync(this.skillsDir, { recursive: true })
+    }
+    if (!fs.existsSync(this.sidecarDir)) {
+      fs.mkdirSync(this.sidecarDir, { recursive: true })
     }
   }
 
@@ -114,6 +229,9 @@ export class SkillPresenter implements ISkillPresenter {
     const entries = fs.readdirSync(this.skillsDir, { withFileTypes: true })
 
     for (const entry of entries) {
+      if (this.shouldIgnoreSkillsRootEntry(entry.name)) {
+        continue
+      }
       if (entry.isDirectory()) {
         const skillPath = path.join(this.skillsDir, entry.name, 'SKILL.md')
         if (fs.existsSync(skillPath)) {
@@ -196,7 +314,7 @@ export class SkillPresenter implements ISkillPresenter {
   async getMetadataPrompt(): Promise<string> {
     const skills = await this.getMetadataList()
     const header = '# Available Skills'
-    const dirLine = `Skills directory: ${this.skillsDir}`
+    const dirLine = `Skills directory: \`${this.skillsDir}\``
 
     if (skills.length === 0) {
       return `${header}\n\n${dirLine}\nNo skills are currently installed.`
@@ -239,10 +357,11 @@ export class SkillPresenter implements ISkillPresenter {
       const rawContent = fs.readFileSync(metadata.path, 'utf-8')
       const { content } = matter(rawContent)
       const renderedContent = this.replacePathVariables(content, metadata)
+      const runtimeInstructions = await this.buildRuntimeInstructions(metadata)
 
       const skillContent: SkillContent = {
         name,
-        content: renderedContent.trim()
+        content: [renderedContent.trim(), runtimeInstructions].filter(Boolean).join('\n\n')
       }
 
       this.contentCache.set(name, skillContent)
@@ -257,6 +376,32 @@ export class SkillPresenter implements ISkillPresenter {
     return content
       .replace(/\$\{SKILL_ROOT\}/g, metadata.skillRoot)
       .replace(/\$\{SKILLS_DIR\}/g, this.skillsDir)
+  }
+
+  private async buildRuntimeInstructions(metadata: SkillMetadata): Promise<string> {
+    const scripts = (await this.listSkillScripts(metadata.name)).filter((script) => script.enabled)
+    const lines = [
+      '## DeepChat Runtime Context',
+      `- Skill root: \`${metadata.skillRoot}\`.`,
+      '- Relative paths mentioned by this skill are relative to the skill root unless stated otherwise.',
+      '- When this skill needs script execution, prefer `skill_run` over `exec`.'
+    ]
+
+    if (scripts.length > 0) {
+      lines.push('- Bundled runnable scripts:')
+      lines.push(
+        ...scripts.map((script) => {
+          const suffix = script.description ? ` - ${script.description}` : ''
+          return `  - ${script.relativePath} (${script.runtime})${suffix}`
+        })
+      )
+    } else {
+      lines.push('- No bundled scripts detected for this skill.')
+    }
+
+    lines.push('- Do not guess script paths or change directories to locate skill files.')
+
+    return lines.join('\n')
   }
 
   /**
@@ -591,6 +736,7 @@ export class SkillPresenter implements ISkillPresenter {
 
       // Delete the directory
       fs.rmSync(skillDir, { recursive: true, force: true })
+      this.deleteSkillExtension(name)
 
       eventBus.sendToRenderer(SKILL_EVENTS.UNINSTALLED, SendTarget.ALL_WINDOWS, { name })
 
@@ -627,6 +773,87 @@ export class SkillPresenter implements ISkillPresenter {
     }
   }
 
+  async saveSkillWithExtension(
+    name: string,
+    content: string,
+    config: SkillExtensionConfig
+  ): Promise<SkillInstallResult> {
+    this.ensureSkillsDir()
+    if (this.metadataCache.size === 0) {
+      await this.discoverSkills()
+    }
+
+    const metadata = this.metadataCache.get(name)
+    if (!metadata) {
+      return { success: false, error: `Skill "${name}" not found` }
+    }
+
+    const sidecarPath = this.getSidecarPath(name)
+    const previousSkillContent = fs.readFileSync(metadata.path, 'utf-8')
+    const hadSidecar = fs.existsSync(sidecarPath)
+    const previousSidecarContent = hadSidecar ? fs.readFileSync(sidecarPath, 'utf-8') : null
+    const sanitized = sanitizeSkillExtensionConfig(config)
+
+    try {
+      fs.writeFileSync(metadata.path, content, 'utf-8')
+      fs.writeFileSync(sidecarPath, JSON.stringify(sanitized, null, 2), 'utf-8')
+
+      this.contentCache.delete(name)
+      const newMetadata = await this.parseSkillMetadata(metadata.path, name)
+      if (newMetadata) {
+        this.metadataCache.set(name, newMetadata)
+      }
+
+      return { success: true, skillName: name }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error)
+
+      try {
+        fs.writeFileSync(metadata.path, previousSkillContent, 'utf-8')
+        if (hadSidecar && previousSidecarContent !== null) {
+          fs.writeFileSync(sidecarPath, previousSidecarContent, 'utf-8')
+        } else if (fs.existsSync(sidecarPath)) {
+          fs.rmSync(sidecarPath, { force: true })
+        }
+      } catch (rollbackError) {
+        const rollbackMessage =
+          rollbackError instanceof Error ? rollbackError.message : String(rollbackError)
+        logger.warn('[SkillPresenter] Failed to rollback combined skill save', {
+          name,
+          error,
+          rollbackError
+        })
+        return {
+          success: false,
+          error: `${errorMsg} (rollback failed: ${rollbackMessage})`
+        }
+      }
+
+      this.contentCache.delete(name)
+      return { success: false, error: errorMsg }
+    }
+  }
+
+  async readSkillFile(name: string): Promise<string> {
+    if (this.metadataCache.size === 0) {
+      await this.discoverSkills()
+    }
+
+    const metadata = this.metadataCache.get(name)
+    if (!metadata) {
+      throw new Error(`Skill "${name}" not found`)
+    }
+
+    const stats = await fs.promises.stat(metadata.path)
+    if (stats.size > SKILL_CONFIG.SKILL_FILE_MAX_SIZE) {
+      const errorMessage = `[SkillPresenter] Skill file too large: ${stats.size} bytes (max: ${SKILL_CONFIG.SKILL_FILE_MAX_SIZE})`
+      console.error(errorMessage)
+      throw new Error(errorMessage)
+    }
+
+    return await fs.promises.readFile(metadata.path, 'utf-8')
+  }
+
   /**
    * Get folder tree for a skill
    */
@@ -657,7 +884,7 @@ export class SkillPresenter implements ISkillPresenter {
 
       for (const entry of entries) {
         // Skip symbolic links to prevent infinite recursion
-        if (entry.isSymbolicLink()) {
+        if (entry.isSymbolicLink() || entry.name === SKILL_CONFIG.SIDECAR_DIR) {
           continue
         }
 
@@ -693,26 +920,125 @@ export class SkillPresenter implements ISkillPresenter {
     await shell.openPath(this.skillsDir)
   }
 
+  async getSkillExtension(name: string): Promise<SkillExtensionConfig> {
+    this.ensureSkillsDir()
+    const sidecarPath = this.getSidecarPath(name)
+    if (!fs.existsSync(sidecarPath)) {
+      return createDefaultSkillExtensionConfig()
+    }
+
+    try {
+      const content = fs.readFileSync(sidecarPath, 'utf-8')
+      return sanitizeSkillExtensionConfig(JSON.parse(content))
+    } catch (error) {
+      logger.warn('[SkillPresenter] Failed to read skill sidecar, using defaults', {
+        name,
+        error
+      })
+      return createDefaultSkillExtensionConfig()
+    }
+  }
+
+  async saveSkillExtension(name: string, config: SkillExtensionConfig): Promise<void> {
+    this.ensureSkillsDir()
+    if (this.metadataCache.size === 0) {
+      await this.discoverSkills()
+    }
+
+    if (!this.metadataCache.has(name)) {
+      throw new Error(`Skill "${name}" not found`)
+    }
+
+    const sanitized = sanitizeSkillExtensionConfig(config)
+    fs.writeFileSync(this.getSidecarPath(name), JSON.stringify(sanitized, null, 2), 'utf-8')
+    this.contentCache.delete(name)
+  }
+
+  async listSkillScripts(name: string): Promise<SkillScriptDescriptor[]> {
+    if (this.metadataCache.size === 0) {
+      await this.discoverSkills()
+    }
+
+    const metadata = this.metadataCache.get(name)
+    if (!metadata) {
+      return []
+    }
+
+    const scriptsDir = path.join(metadata.skillRoot, 'scripts')
+    if (!fs.existsSync(scriptsDir)) {
+      return []
+    }
+
+    const extension = await this.getSkillExtension(name)
+    const descriptors = this.collectScriptDescriptors(scriptsDir, metadata.skillRoot).map(
+      (script) => {
+        const override = extension.scriptOverrides[script.relativePath] ?? {}
+        return {
+          ...script,
+          enabled: override.enabled ?? true,
+          description: override.description
+        }
+      }
+    )
+
+    descriptors.sort((left, right) => left.relativePath.localeCompare(right.relativePath))
+    return descriptors
+  }
+
+  private async isNewAgentSession(conversationId: string): Promise<boolean> {
+    try {
+      return await this.sessionStatePort.hasNewSession(conversationId)
+    } catch {
+      return false
+    }
+  }
+
+  private isImportedLegacySessionId(conversationId: string): boolean {
+    return conversationId.startsWith('legacy-session-')
+  }
+
+  private async loadNewSessionSkills(conversationId: string): Promise<string[]> {
+    const persistedSkills = this.getPersistedNewSessionSkills(conversationId)
+    if (persistedSkills.length > 0 || !this.isImportedLegacySessionId(conversationId)) {
+      return persistedSkills
+    }
+
+    try {
+      return await this.sessionStatePort.repairImportedLegacySessionSkills(conversationId)
+    } catch (error) {
+      console.warn(
+        `[SkillPresenter] Failed to repair imported legacy session skills for ${conversationId}:`,
+        error
+      )
+      return persistedSkills
+    }
+  }
+
+  private warnLegacySkillRetired(conversationId: string): void {
+    if (this.legacySkillRetirementWarnings.has(conversationId)) {
+      return
+    }
+
+    this.legacySkillRetirementWarnings.add(conversationId)
+    logger.warn('[SkillPresenter] Ignoring skill state update for retired legacy conversation.', {
+      conversationId
+    })
+  }
+
   /**
    * Get active skills for a conversation
    */
   async getActiveSkills(conversationId: string): Promise<string[]> {
-    try {
-      const conversation = await presenter.sessionPresenter.getConversation(conversationId)
-      const activeSkills = conversation?.settings?.activeSkills || []
-      const validSkills = await this.validateSkillNames(activeSkills)
-
-      if (validSkills.length !== activeSkills.length) {
-        await presenter.sessionPresenter.updateConversationSettings(conversationId, {
-          activeSkills: validSkills
-        })
+    if (await this.isNewAgentSession(conversationId)) {
+      const skills = await this.loadNewSessionSkills(conversationId)
+      const validSkills = await this.validateSkillNames(skills)
+      if (validSkills.length !== skills.length) {
+        this.setPersistedNewSessionSkills(conversationId, validSkills)
       }
-
       return validSkills
-    } catch (error) {
-      console.error(`[SkillPresenter] Error getting active skills for ${conversationId}:`, error)
-      return []
     }
+
+    return []
   }
 
   /**
@@ -720,16 +1046,19 @@ export class SkillPresenter implements ISkillPresenter {
    */
   async setActiveSkills(conversationId: string, skills: string[]): Promise<void> {
     try {
-      const previousSkills = await this.getActiveSkills(conversationId)
-      const previousSet = new Set(previousSkills)
-
+      const isNewSession = await this.isNewAgentSession(conversationId)
       // Validate skill names
       const validSkills = await this.validateSkillNames(skills)
+      if (!isNewSession) {
+        this.warnLegacySkillRetired(conversationId)
+        return
+      }
+
+      const previousSkills = await this.getActiveSkills(conversationId)
+      const previousSet = new Set(previousSkills)
       const validSet = new Set(validSkills)
 
-      await presenter.sessionPresenter.updateConversationSettings(conversationId, {
-        activeSkills: validSkills
-      })
+      this.setPersistedNewSessionSkills(conversationId, validSkills)
 
       const activated = validSkills.filter((skill) => !previousSet.has(skill))
       const deactivated = previousSkills.filter((skill) => !validSet.has(skill))
@@ -751,6 +1080,10 @@ export class SkillPresenter implements ISkillPresenter {
       console.error(`[SkillPresenter] Error setting active skills for ${conversationId}:`, error)
       throw error
     }
+  }
+
+  async clearNewAgentSessionSkills(conversationId: string): Promise<void> {
+    this.setPersistedNewSessionSkills(conversationId, [])
   }
 
   /**
@@ -780,7 +1113,11 @@ export class SkillPresenter implements ISkillPresenter {
       }
     }
 
-    return Array.from(allowedTools)
+    const result = normalizeSkillAllowedTools(Array.from(allowedTools))
+    for (const warning of result.warnings) {
+      logger.warn(warning, { conversationId })
+    }
+    return result.tools
   }
 
   /**
@@ -794,6 +1131,9 @@ export class SkillPresenter implements ISkillPresenter {
     this.watcher = watch(this.skillsDir, {
       ignoreInitial: true,
       depth: 2, // Watch skill directories and their immediate contents
+      ignored: (watchPath) =>
+        watchPath.includes(`${path.sep}${SKILL_CONFIG.SIDECAR_DIR}${path.sep}`) ||
+        path.basename(watchPath) === SKILL_CONFIG.SIDECAR_DIR,
       awaitWriteFinish: {
         stabilityThreshold: SKILL_CONFIG.WATCHER_STABILITY_THRESHOLD,
         pollInterval: SKILL_CONFIG.WATCHER_POLL_INTERVAL
@@ -873,7 +1213,7 @@ export class SkillPresenter implements ISkillPresenter {
 
     for (const entry of entries) {
       // Skip symbolic links to prevent infinite recursion
-      if (entry.isSymbolicLink()) {
+      if (entry.isSymbolicLink() || entry.name === SKILL_CONFIG.SIDECAR_DIR) {
         continue
       }
 
@@ -897,5 +1237,75 @@ export class SkillPresenter implements ISkillPresenter {
     this.contentCache.clear()
     this.discoveryPromise = null
     this.initialized = false
+  }
+
+  private shouldIgnoreSkillsRootEntry(entryName: string): boolean {
+    return (
+      entryName === SKILL_CONFIG.SIDECAR_DIR ||
+      entryName.includes('.backup-') ||
+      entryName.startsWith('.')
+    )
+  }
+
+  private getSidecarPath(name: string): string {
+    return path.join(this.sidecarDir, `${name}.json`)
+  }
+
+  private deleteSkillExtension(name: string): void {
+    const sidecarPath = this.getSidecarPath(name)
+    if (fs.existsSync(sidecarPath)) {
+      fs.rmSync(sidecarPath, { force: true })
+    }
+  }
+
+  private collectScriptDescriptors(
+    currentDir: string,
+    skillRoot: string,
+    acc: SkillScriptDescriptor[] = []
+  ): SkillScriptDescriptor[] {
+    const entries = fs.readdirSync(currentDir, { withFileTypes: true })
+
+    for (const entry of entries) {
+      if (entry.isSymbolicLink()) {
+        continue
+      }
+
+      const fullPath = path.join(currentDir, entry.name)
+      if (entry.isDirectory()) {
+        this.collectScriptDescriptors(fullPath, skillRoot, acc)
+        continue
+      }
+
+      const runtime = SUPPORTED_SCRIPT_EXTENSIONS[path.extname(entry.name).toLowerCase()]
+      if (!runtime) {
+        continue
+      }
+
+      acc.push({
+        name: entry.name,
+        relativePath: path.relative(skillRoot, fullPath),
+        absolutePath: fullPath,
+        runtime,
+        enabled: true
+      })
+    }
+
+    return acc
+  }
+
+  private getPersistedNewSessionSkills(conversationId: string): string[] {
+    try {
+      return this.sessionStatePort.getPersistedNewSessionSkills(conversationId)
+    } catch (error) {
+      console.warn(
+        `[SkillPresenter] Failed to read persisted active skills for ${conversationId}:`,
+        error
+      )
+      return []
+    }
+  }
+
+  private setPersistedNewSessionSkills(conversationId: string, skills: string[]): void {
+    this.sessionStatePort.setPersistedNewSessionSkills(conversationId, skills)
   }
 }

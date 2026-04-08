@@ -8,6 +8,7 @@
     "searchEngine": "موتور جستجو",
     "searchEngineSelect": "انتخاب موتور جستجو",
     "searchPreview": "پیش‌نمایش جستجو",
+    "autoScrollEnabled": "پیمایش خودکار هنگام تولید",
     "searchAssistantModel": "مدل دستیار",
     "selectModel": "انتخاب مدل",
     "proxyMode": "حالت پراکسی",
@@ -41,17 +42,13 @@
     "contentProtectionEnableDesc": "روشن کردن حفاظت نمایشگر از ضبط پنجره دیپ‌چت به‌دست برنامه‌های هم‌رسانی نمایشگر جلوگیری میکند و از حریم خصوصی محتوای شما محافظت می‌کند. توجه داشته باشید که این ویژگی همه رابط‌ها را کاملاً مخفی نمی‌کند. لطفاً از این ویژگی به‌طور مسئولانه و مطابق با مقررات استفاده کنید. همچنین، برخی برنامه‌های هم‌رسانی نمایشگر ممکن است از این ویژگی پشتیبانی نکنند. در برخی محیط‌ها ممکن است پنجره‌ای سیاه باقی بماند.",
     "contentProtectionDisableDesc": "خاموش کردن حفاظت نمایشگر به برنامه‌های هم‌رسانی نمایشگر اجازه می‌دهد پنجره دیپ‌چت را ضبط کنند.",
     "contentProtectionRestartNotice": "تغییر این تنظیم برنامه را بازراه‌اندازی می‌کند. آیا می‌خواهید ادامه دهید؟",
-    "soundEnabled": "روشن کردن جلوه‌های صوتی",
     "copyWithCotEnabled": "رونوشت دارای جزئیات COT",
     "loggingEnabled": "روشن کردن ثبت رخدادها",
     "loggingDialogTitle": "پذیرش تغییر تنظیم ثبت رخدادها",
     "loggingEnableDesc": "روشن کردن ثبت رخدادها به ما کمک می‌کند مشکلات را عیب‌یابی کرده و برنامه را بهبود دهیم. پرونده‌های رخدادها ممکن است دارای اطلاعات حساس باشند.",
     "loggingDisableDesc": "خاموش کردن ثبت رخدادها، جمع‌آوری رخداد‌های برنامه را متوقف می‌کند.",
-    "loggingRestartNotice": "تغییر این تنظیم برنامه را بازراه‌اندازی می‌کند. آیا می‌خواهید ادامه دهید؟",
-    "webContentLengthLimit": "محدودیت طول محتوای وب",
-    "webContentLengthLimitHint": "(تنظیم بر 0 برای بدون محدودیت)",
     "charactersUnit": "نویسه",
-    "webContentLengthLimitTooltip": "حداکثر طول محتوای متنی استخراج شده از صفحات وب (تعداد نویسه) را تنظیم کنید، محدوده: 0-50000. تنظیم بر 0 به معنای بدون محدودیت و بازیابی محتوای کامل وب است؛ مقادیر بزرگتر محتوای وب کامل‌تری ارائه می‌دهند اما ممکن است زمان پردازش و استفاده از رمزینه‌ها را افزایش دهند.",
+    "loggingRestartNotice": "تغییر این تنظیم برنامه را بازراه‌اندازی می‌کند. آیا می‌خواهید ادامه دهید؟",
     "openLogFolder": "باز کردن پوشه رخدادها",
     "shortcut": {
       "newChat": "ساختن گفت‌وگوی جدید",
@@ -61,7 +58,77 @@
     "notificationsDesc": "هنگامی که دیپ‌چت در پیش‌زمینه نیست، اگر نشستی تولید شود، یک آگاه‌ساز سامانه فرستاده خواهد شد",
     "traceDebugEnabled": "پیگیری تماس",
     "fileMaxSize": "حداکثر اندازه فایل",
-    "fileMaxSizeHint": "حداکثر اندازه یک فایل قابل آپلود را محدود می‌کند"
+    "fileMaxSizeHint": "حداکثر اندازه یک فایل قابل آپلود را محدود می‌کند",
+    "defaultModel": {
+      "title": "مدل پیش‌فرض",
+      "chatModel": "مدل گفتگوی پیش‌فرض"
+    },
+    "autoCompaction": {
+      "title": "فشرده‌سازی خودکار",
+      "enabled": "فعال‌سازی فشرده‌سازی خودکار",
+      "description": "وقتی یک گفتگو به محدودیت پنجرهٔ زمینهٔ مدل نزدیک می‌شود، DeepChat می‌تواند تاریخچهٔ قدیمی‌تر را به‌صورت خودکار فشرده کند تا جلسه ادامه پیدا کند. اگر این گزینه غیرفعال باشد، تاریخچهٔ مازاد به‌جای خلاصه‌سازی مستقیماً حذف می‌شود.",
+      "thresholdLabel": "آستانهٔ فعال‌سازی",
+      "thresholdMin": "زودتر ({value}%)",
+      "thresholdMax": "دیرتر ({value}%)",
+      "thresholdDescription": "وقتی مصرف پرامپت به این نسبت از بودجهٔ مؤثر تاریخچه برسد، فشرده‌سازی شروع می‌شود. مقادیر کمتر فضای تنفس بیشتری می‌دهند؛ مقادیر بالاتر زمینهٔ خام بیشتری را حفظ می‌کنند.",
+      "retainPairsLabel": "نگه‌داری جفت‌های پیام اخیر",
+      "retainPairsValue": "{count} جفت",
+      "retainPairsDescription": "جدیدترین جفت‌های کاملِ کاربر و دستیار را خارج از فشرده‌سازی نگه می‌دارد. پرس‌وجوی فعلی شامل نمی‌شود."
+    }
+  },
+  "notificationsHooks": {
+    "title": "هوک‌ها",
+    "description": "پیکربندی اعلان‌های وب‌هوک و هوک‌های چرخهٔ عمر.",
+    "events": {
+      "title": "رویدادها",
+      "SessionStart": "شروع نشست",
+      "UserPromptSubmit": "ارسال پرامپت کاربر",
+      "PreToolUse": "پیش از استفاده از ابزار",
+      "PostToolUse": "پس از استفاده از ابزار",
+      "PostToolUseFailure": "شکست استفاده از ابزار",
+      "PermissionRequest": "درخواست اجازه",
+      "Stop": "توقف",
+      "SessionEnd": "پایان نشست"
+    },
+    "telegram": {
+      "title": "Telegram",
+      "description": "ارسال اعلان‌ها از طریق ربات تلگرام.",
+      "botToken": "توکن ربات",
+      "botTokenPlaceholder": "توکن ربات تلگرام",
+      "chatId": "شناسهٔ گفتگو",
+      "chatIdPlaceholder": "مثلاً 123456789",
+      "threadId": "شناسهٔ رشته (اختیاری)",
+      "threadIdPlaceholder": "شناسهٔ رشتهٔ اختیاری"
+    },
+    "discord": {
+      "title": "Discord",
+      "description": "ارسال اعلان‌ها از طریق وب‌هوک دیسکورد.",
+      "webhookUrl": "نشانی وب‌هوک",
+      "webhookUrlPlaceholder": "https://discord.com/api/webhooks/..."
+    },
+    "confirmo": {
+      "title": "Confirmo",
+      "description": "ارسال اعلان‌ها از طریق هوک Confirmo (همهٔ رویدادها).",
+      "unavailable": "هوک Confirmo یافت نشد: {path}"
+    },
+    "commands": {
+      "title": "فرمان‌های هوک",
+      "description": "برای هر رویداد یک فرمان اجرا شود.",
+      "hint": "محتوا به‌صورت JSON به stdin فرستاده می‌شود.",
+      "commandPlaceholder": "فرمان برای اجرا"
+    },
+    "test": {
+      "button": "آزمون",
+      "testing": "در حال آزمون...",
+      "success": "موفق",
+      "failed": "ناموفق",
+      "duration": "{ms} ms",
+      "statusCode": "HTTP {code}",
+      "exitCode": "کد خروج {code}",
+      "retryAfter": "تلاش دوباره پس از {ms} ms",
+      "stdout": "stdout",
+      "stderr": "stderr"
+    }
   },
   "data": {
     "title": "تنظیمات داده",
@@ -104,6 +171,18 @@
       "backupSuccessTitle": "پشتیبان گیری با موفقیت انجام شد",
       "backupSuccessMessage": "داده ها با موفقیت پشتیبان گیری شدند"
     },
+    "modelConfigUpdate": {
+      "title": "به‌روزرسانی پیکربندی مدل",
+      "description": "برای به‌روزرسانی قابلیت‌های مدل و تنظیمات پیش‌فرض، فایل provider.json را از مبدأ به‌صورت اجباری تازه‌سازی می‌کند.",
+      "button": "اکنون به‌روزرسانی کن",
+      "updating": "در حال به‌روزرسانی...",
+      "updatedTitle": "پیکربندی مدل به‌روز شد",
+      "updatedDescription": "آخرین فرادادهٔ ارائه‌دهنده دریافت شد.",
+      "upToDateTitle": "از قبل به‌روز است",
+      "upToDateDescription": "پیکربندی محلی مدل همین حالا هم از تازه‌ترین فرادادهٔ ارائه‌دهنده استفاده می‌کند.",
+      "failedTitle": "به‌روزرسانی ناموفق بود",
+      "failedDescription": "فعلاً امکان به‌روزرسانی پیکربندی مدل وجود ندارد. کمی بعد دوباره تلاش کنید."
+    },
     "yoBrowser": {
       "clearButton": "داده های YoBrowser را پاک کنید",
       "clearFailedDescription": "لطفاً دوباره امتحان کنید یا برای اطلاعات بیشتر گزارش‌ها را بررسی کنید.",
@@ -117,6 +196,109 @@
       "description": "یک سندباکس مرورگر مستقل که کوکی‌ها و فضای ذخیره‌سازی محلی را با برنامه اصلی به اشتراک نمی‌گذارد. داده های YoBrowser را می توان با یک کلیک در اینجا پاک کرد.",
       "title": "YoBrowser Sandbox"
     }
+  },
+  "dashboard": {
+    "badge": "داشبورد مصرف",
+    "title": "داشبورد مصرف",
+    "description": "مصرف توکن، نرخ اصابت کش و هزینهٔ تخمینی را نمایش می‌دهد. داده‌های توکن و هزینه بر پایهٔ اطلاعات عمومی برآورد می‌شوند و ممکن است برخی ارائه‌دهندگان یا پیام‌های قدیمی‌تر دادهٔ کاملی نداشته باشند؛ این ارقام فقط برای مرجع هستند.",
+    "actions": {
+      "refresh": "به‌روزرسانی"
+    },
+    "backfill": {
+      "runningTitle": "در حال به‌روزرسانی داده‌های مصرف",
+      "runningDescription": "داده‌های مصرف هنوز در پس‌زمینه در حال به‌روزرسانی هستند. نتایج فعلی از همین حالا قابل مشاهده‌اند.",
+      "failedTitle": "به‌روزرسانی داده‌های مصرف ناموفق بود",
+      "failedDescription": "این صفحه را تازه‌سازی کنید یا بعداً دوباره تلاش کنید."
+    },
+    "error": {
+      "title": "بارگذاری داشبورد ناموفق بود",
+      "description": "لطفاً بعداً دوباره تلاش کنید."
+    },
+    "empty": {
+      "title": "هنوز آماری از مصرف وجود ندارد",
+      "description": "وقتی داده‌های مصرف در دسترس باشند، مصرف توکن، نرخ اصابت کش و هزینهٔ تخمینی در اینجا نمایش داده می‌شود.",
+      "historyNote": "داده‌های توکن و هزینه بر پایهٔ اطلاعات عمومی برآورد می‌شوند. ممکن است برخی ارائه‌دهندگان یا پیام‌های قدیمی‌تر دادهٔ کاملی نداشته باشند؛ این ارقام فقط برای مرجع هستند."
+    },
+    "summary": {
+      "totalTokens": "مجموع توکن‌ها",
+      "totalTokensDescription": "نشان می‌دهد توکن‌های ورودی و خروجی چه سهمی از مجموع دارند.",
+      "inputTokensLabel": "ورودی",
+      "outputTokensLabel": "خروجی",
+      "cachedTokens": "توکن‌های کش‌شده",
+      "cachedTokensDescription": "توکن‌های پرامپتی که از کش ارائه‌دهنده پاسخ داده شده‌اند.",
+      "cachedTokensCachedLabel": "کش‌شده",
+      "cachedTokensUncachedLabel": "بدون کش",
+      "cacheHitRate": "نرخ اصابت کش",
+      "cacheHitRateDescription": "نسبت توکن‌های کش‌شدهٔ پرامپت به کل توکن‌های ورودی.",
+      "estimatedCost": "هزینهٔ تخمینی",
+      "estimatedCostDescription": "برآورد به دلار آمریکا بر اساس قیمت‌گذاری ارائه‌دهنده یا قیمت جایگزین AIHubMix.",
+      "estimatedCostTrendLabel": "روند ۳۰ روز گذشته",
+      "estimatedCostTrendEmpty": "در ۳۰ روز گذشته هیچ هزینه‌ای ثبت نشده است.",
+      "recordingStartedAt": "شروع ثبت",
+      "recordingStartedAtDescription": "قدیمی‌ترین رکورد مصرفی که اکنون در این داشبورد نگه‌داری می‌شود.",
+      "withDeepChatDaysLabel": "روزهای همراهی",
+      "withDeepChatDaysValue": "{days} روز",
+      "withDeepChatDaysSentence": "اکنون در روز {days} همراهی با DeepChat هستید.",
+      "withDeepChatDaysDescription": "بر پایهٔ قدیمی‌ترین رکورد استفادهٔ شما در {date}.",
+      "withDeepChatDaysDescriptionUnavailable": "هنوز هیچ رکورد استفاده‌ای وجود ندارد.",
+      "tokenUsage": "مصرف توکن",
+      "nostalgiaLabel": "یادها",
+      "nostalgiaDaysValue": "{days} روز",
+      "nostalgiaSessionsValue": "{count} نشست",
+      "nostalgiaMessagesValue": "{count} پیام",
+      "nostalgiaDaysDetailLabel": "مدت همراهی",
+      "nostalgiaDaysDetail": "شما {days} روز را با DeepChat گذرانده‌اید.",
+      "nostalgiaSessionsDetailLabel": "نشست‌ها",
+      "nostalgiaSessionsDetail": "با هم {count} نشست داشته‌اید.",
+      "nostalgiaMessagesDetailLabel": "پیام‌ها",
+      "nostalgiaMessagesDetail": "{count} پیام با هم ردوبدل کرده‌اید.",
+      "nostalgiaMostActiveDayLabel": "فعال‌ترین روز",
+      "nostalgiaMostActiveDayDetail": "{date} فعال‌ترین روز شما بود و {count} پیام در آن ثبت شد."
+    },
+    "calendar": {
+      "title": "تقویم مشارکت",
+      "description": "مصرف روزانهٔ توکن در ۳۶۵ روز گذشته.",
+      "legend": "کم به زیاد",
+      "tooltip": "{date}: {tokens} توکن"
+    },
+    "breakdown": {
+      "providerTitle": "رتبه‌بندی ارائه‌دهنده‌ها",
+      "providerDescription": "ابتدا بر اساس هزینهٔ تخمینی و سپس بر اساس مجموع توکن‌ها مرتب شده است.",
+      "modelTitle": "رتبه‌بندی مدل‌ها",
+      "modelDescription": "۱۰ مدل برتر بر اساس هزینهٔ تخمینی و سپس مجموع توکن‌ها.",
+      "messages": "{count} پیام",
+      "empty": "هنوز داده‌ای برای نمایش جزئیات وجود ندارد."
+    },
+    "rtk": {
+      "title": "صرفه‌جویی RTK",
+      "description": "تخمین توکن‌هایی که RTK در اجرای فرمان‌های بومی DeepChat مانع رسیدنشان به بافت مدل شده است.",
+      "actions": {
+        "retry": "تلاش دوباره"
+      },
+      "status": {
+        "disabled": "غیرفعال",
+        "checking": "در حال بررسی",
+        "healthy": "آماده",
+        "unhealthy": "غیرقابل استفاده"
+      },
+      "descriptionDisabled": "RTK برای این نشست برنامه خاموش است، بنابراین فرمان‌ها از مسیر اجرای عادی عبور می‌کنند.",
+      "descriptionChecking": "DeepChat در حال بررسی است که آیا RTK در محیط فعلی به‌درستی اجرا می‌شود یا نه.",
+      "descriptionHealthy": "RTK برای اجرای فرمان‌های بومی DeepChat فعال است.",
+      "descriptionUnhealthy": "بررسی سلامت RTK هنگام شروع اجرا ناموفق بود و برای این نشست برنامه غیرفعال شده است.",
+      "sourceLabel": "منبع زمان‌اجرا: {source}",
+      "source": {
+        "bundled": "داخلی",
+        "system": "سیستمی",
+        "none": "ناموجود"
+      },
+      "summary": {
+        "savedTokens": "توکن‌های ذخیره‌شده",
+        "commands": "فرمان‌های ثبت‌شده",
+        "avgSavingsPct": "میانگین صرفه‌جویی",
+        "outputTokens": "خروجی پالایش‌شده"
+      }
+    },
+    "unavailable": "ناموجود"
   },
   "model": {
     "title": "تنظیمات مدل",
@@ -147,6 +329,11 @@
     "provider": "فراهم‌کننده خدمات",
     "providerSetting": "تنظیمات فراهم‌کننده خدمات",
     "selectModel": "انتخاب مدل",
+    "form": {
+      "id": {
+        "label": "شناسه"
+      }
+    },
     "modelConfig": {
       "cancel": "لغو کردن",
       "contextLength": {
@@ -183,22 +370,9 @@
         "description": "آیا مدل از توانایی استدلال پشتیبانی می کند؟",
         "label": "توانایی استدلال"
       },
-      "enableSearch": {
-        "label": "جستجوی وب",
-        "description": "امکان جستجو در وب را برای دریافت اطلاعات جدید به مدل ارائه دهید"
-      },
-      "forcedSearch": {
-        "label": "جستجوی اجباری",
-        "description": "مدل را مجبور به انجام جستجوی وب کنید، در صورت غیرفعال بودن مدل خود تصمیم می‌گیرد"
-      },
-      "searchStrategy": {
-        "label": "استراتژی جستجو",
-        "description": "انتخاب حالت عملکرد جستجو: turbo تعادل سرعت و اثربخشی، max بهترین نتایج جستجو را ارائه می‌دهد",
-        "placeholder": "انتخاب استراتژی جستجو",
-        "options": {
-          "turbo": "Turbo - تعادل سرعت پاسخ و اثربخشی جستجو (توصیه شده)",
-          "max": "Max - حالت عملکرد بالا، بهترین نتایج جستجو را ارائه می‌دهد"
-        }
+      "interleavedThinking": {
+        "label": "Interleaved Thinking",
+        "description": "کنترل می‌کند که این مدل پیام‌های reasoning و tool-call را با منطق Interleaved Thinking پردازش کند یا نه. مقادیر پیش‌فرض provider به‌صورت خودکار اعمال می‌شوند."
       },
       "thinkingBudget": {
         "label": "بودجه تفکر",
@@ -271,10 +445,6 @@
         "description": "آیا مدل از توانایی بصری پشتیبانی می کند؟",
         "label": "توانایی بصری"
       },
-      "searchLimit": {
-        "label": "محدودیت جستجو",
-        "description": "محدودیت مدل: فعال‌سازی جستجوی اینترنتی باعث غیرفعال شدن فراخوانی توابع ابزار می‌شود"
-      },
       "apiEndpoint": {
         "description": "انتخاب نقطه پایانی API OpenAI مورد استفاده این مدل.",
         "label": "نقطه پایانی API",
@@ -312,6 +482,11 @@
     "getKeyTip": "لطفاً به",
     "getKeyTipEnd": "بروید تا کلید API را دریافت کنید",
     "urlFormat": "نمونه API: {defaultUrl}",
+    "urlFormatFill": "قرار دادن در URL API",
+    "openaiResponsesNotice": "OpenAI به صورت پیش‌فرض از Responses API استفاده می‌کند. اگر endpoint شخص ثالث فقط از Chat Completions پشتیبانی می‌کند، از ارائه‌دهنده OpenAI Completions استفاده کنید.",
+    "modifyBaseUrl": "ویرایش",
+    "baseUrlLockedHint": "این ارائه‌دهنده برای کاهش خطاهای پیکربندی روی آدرس پایه پیشنهادی قفل شده است.",
+    "refreshModelsWithMetadataHint": "نوسازی این ارائه‌دهنده ابتدا فرادادهٔ بالادستی را همگام می‌کند و سپس فهرست محلی مدل‌ها را بازسازی می‌کند.",
     "modelList": "فهرست مدل‌ها",
     "enableModels": "روشن کردن مدل‌ها",
     "disableAllModels": "خاموش کردن همه مدل‌ها",
@@ -327,6 +502,38 @@
     "stopModel": "ایست مدل",
     "pulling": "در حال دریافت...",
     "runModel": "اجرای مدل",
+    "voiceai": {
+      "title": "تبدیل متن به گفتار Voice.ai",
+      "description": "گفتار را از متن تولید کنید. صداها در فهرست مدل‌ها در پایین نمایش داده می‌شوند.",
+      "audioFormat": {
+        "label": "قالب صوتی",
+        "placeholder": "انتخاب قالب",
+        "helper": "برای بیشتر موارد MP3 توصیه می‌شود."
+      },
+      "language": {
+        "label": "زبان",
+        "placeholder": "مثلاً en",
+        "helper": "پشتیبانی‌شده: en, ca, sv, es, fr, de, it, pt, pl, ru, nl."
+      },
+      "model": {
+        "label": "مدل TTS",
+        "placeholder": "voiceai-tts-v1-latest",
+        "helper": "برای مدل‌های پشتیبانی‌شده به مستندات Voice.ai مراجعه کنید."
+      },
+      "agentId": {
+        "label": "شناسه عامل صوتی",
+        "placeholder": "شناسه voice agent را جای‌گذاری کنید",
+        "helper": "برای تماس‌های بلادرنگ لازم است."
+      },
+      "temperature": {
+        "label": "دما",
+        "helper": "تصادفی‌بودن را کنترل می‌کند (0-2)."
+      },
+      "topP": {
+        "label": "Top P",
+        "helper": "نمونه‌گیری هسته‌ای (0-1)."
+      }
+    },
     "dialog": {
       "disableModel": {
         "title": "پذیرش خاموش کردن مدل",
@@ -365,6 +572,21 @@
         "baseUrlPlaceholder": "لطفاً نشانی پایه API را وارد کنید",
         "enable": "روشن کردن فراهم‌کننده"
       },
+      "providerDeeplinkImport": {
+        "title": "درون‌ریزی فراهم‌کننده",
+        "description": "پیش از اعمال، پیکربندی تحلیل‌شدهٔ فراهم‌کننده را بررسی کنید.",
+        "type": "نوع",
+        "url": "نشانی",
+        "key": "کلید",
+        "overwriteWarning": "این درون‌ریزی پیکربندی فعلی فراهم‌کننده را بازنویسی می‌کند.",
+        "confirming": "در حال درون‌ریزی..."
+      },
+      "baseUrlUnlock": {
+        "title": "تأیید تغییر آدرس پایه",
+        "description": "تغییر آدرس پایه برای این ارائه‌دهنده توصیه نمی‌شود. یک نقطه‌پایان نادرست ممکن است باعث شکست درخواست‌ها یا رفتارهای غیرمنتظره دیگر شود. اگر از این ریسک آگاه هستید، می‌توانید ادامه دهید.",
+        "confirm": "ادامه"
+      },
+
       "deleteProvider": {
         "title": "پذیرش پاک کردن فراهم‌کننده",
         "content": "آیا مطمئن هستید که می‌خواهید فراهم‌کننده \"{name}\" را پاک کنید؟ این کنش بازگشت‌پذیر نیست.",
@@ -439,32 +661,16 @@
       "backupSuccessTitle": "پشتیبان‌گیری کامل شد",
       "backupSuccessMessage": "فایل پشتیبان در {time} ذخیره شد (حجم: {size})",
       "importSuccessTitle": "درون‌ریزی با موفقیت انجام شد",
-      "importSuccessMessage": "{count} گفتگو با موفقیت درون‌ریزی شد"
+      "importSuccessMessage": "{count} گفتگو با موفقیت درون‌ریزی شد",
+      "refreshModelsSuccessTitle": "مدل‌ها نوسازی شدند",
+      "refreshModelsSuccessDescription": "جدیدترین فهرست مدل برای این ارائه‌دهنده همگام شد.",
+      "refreshModelsSuccessDescriptionWithMetadata": "فرادادهٔ بالادستی و جدیدترین فهرست مدل برای این ارائه‌دهنده همگام شد.",
+      "refreshModelsFailedTitle": "نوسازی ناموفق بود",
+      "refreshModelsFailedDescription": "در حال حاضر امکان نوسازی مدل‌های این ارائه‌دهنده وجود ندارد. لطفاً بعداً دوباره تلاش کنید.",
+      "refreshModelsFailedDescriptionWithMetadata": "در حال حاضر امکان همگام‌سازی فرادادهٔ بالادستی و مدل‌های این ارائه‌دهنده وجود ندارد. لطفاً بعداً دوباره تلاش کنید."
     },
-    "anthropicApiKeyTip": "لطفاً برای دریافت کلید API خود به کنسول انسان شناسی بروید",
-    "anthropicConnected": "انسان شناسی متصل",
-    "anthropicNotConnected": "انسان شناسی متصل نیست",
-    "anthropicOAuthTip": "برای دسترسی به حساب انسان شناسی خود ، روی مجوز DeepChat کلیک کنید",
-    "oauthLogin": "ورود به سیستم",
-    "authMethod": "روش صدور گواهینامه",
-    "authMethodPlaceholder": "روش احراز هویت را انتخاب کنید",
     "apiKeyLabel": "کلید API",
     "apiUrlLabel": "آدرس API",
-    "anthropicOAuthFlowTip": "سیستم به طور خودکار پنجره مجوز را باز می کند. لطفا برگردید و پس از مجوز کد مجوز را وارد کنید.",
-    "anthropicBrowserOpened": "مرورگر خارجی باز است",
-    "anthropicCodeInstruction": "لطفاً مجوز را در یک مرورگر خارجی تکمیل کرده و کد مجوز به دست آمده را در کادر ورودی زیر بچسبانید",
-    "browserOpenedSuccess": "مرورگر خارجی باز است ، لطفاً مجوز را تکمیل کنید",
-    "codeRequired": "لطفاً کد مجوز را وارد کنید",
-    "inputOAuthCode": "کد مجوز را وارد کنید",
-    "codeExchangeFailed": "مبادله کد مجوز انجام نشد",
-    "invalidCode": "کد مجوز نامعتبر",
-    "oauthCodeHint": "لطفاً پس از تکمیل مجوز در یک مرورگر خارجی ، کد مجوز را در اینجا بچسبانید",
-    "oauthCodePlaceholder": "لطفاً کد مجوز را وارد کنید ...",
-    "verifyConnection": "تأیید اتصال",
-    "manageModels": "مدیریت مدل‌ها",
-    "anthropicOAuthActiveTip": "احراز هویت OAuth فعال است، می‌توانید مستقیماً از سرویس‌های Anthropic استفاده کنید",
-    "oauthVerifySuccess": "اتصال OAuth با موفقیت تأیید شد",
-    "oauthVerifyFailed": "تأیید اتصال OAuth ناموفق بود",
     "configurationSaved": "پیکربندی ذخیره شده",
     "configurationUpdated": "پیکربندی به روز شد",
     "dataRefreshed": "داده ها تازه شده است",
@@ -650,6 +856,9 @@
     "enabledDescription": "روشن یا خاموش کردن امکانات و ابزارهای MCP",
     "enableToAccess": "لطفاً MCP را روشن کنید تا به گزینه‌های پیکربندی دسترسی پیدا کنید",
     "marketplace": "رفتن به بازار MCP برای نصب با یک دکمه",
+    "marketMenu": {
+      "higress": "Higress"
+    },
     "technicalDetails": "جزئیات فنی",
     "httpServer": "کارساز HTTP",
     "localProcess": "فرآیند محلی",
@@ -730,7 +939,7 @@
       "parseAndContinue": "تجزیه و ادامه",
       "jsonParseError": "تجزیه JSON ناموفق بود",
       "browseMarketplace": "مرور بازار MCP",
-      "imageModel": "انتخاب مدل بصری",
+      "imageModel": "مدل بصری",
       "customHeadersParseError": "تجزیه سربرگ دلخواه ناموفق بود",
       "customHeaders": "سربرگ درخواست دلخواه",
       "invalidKeyValueFormat": "قالب سربرگ درخواست نادرست است، لطفاً بررسی کنید که ورودی صحیح باشد.",
@@ -865,15 +1074,11 @@
     "zoomIn": "بزرگ‌نمایی",
     "zoomOut": "کوچک‌نمایی",
     "zoomReset": "بازنشانی بزرگ‌نمایی",
-    "closeTab": "بستن برگه کنونی",
-    "newTab": "ساختن برگه جدید",
     "newWindow": "باز کردن پنجره جدید",
     "showHideWindow": "نمایش/مخفی کردن پنجره",
     "newConversation": "گفت‌وگوی جدید",
-    "nextTab": "رفتن به برگه بعدی",
-    "previousTab": "رفتن به برگه پیشین",
-    "specificTab": "رفتن به برگه خاص (1-8)",
-    "lastTab": "رفتن به آخرین برگه"
+    "quickSearch": "جست‌وجوی Spotlight",
+    "closeWindow": "بستن برگه کنونی"
   },
   "rateLimit": {
     "title": "محدودیت نرخ",
@@ -1034,11 +1239,57 @@
       "send": "ارسال درخواست",
       "sending": "ارسال...",
       "title": "اشکال زدایی ACP",
-      "workdirPlaceholder": "برای استفاده از دایرکتوری کاری پیش فرض، خالی بگذارید"
+      "workdirPlaceholder": "برای استفاده از دایرکتوری کاری پیش فرض، خالی بگذارید",
+      "healthCheck": "بررسی سلامت",
+      "healthChecking": "در حال بررسی...",
+      "healthCheckFailed": "بررسی سلامت ناموفق بود"
     },
     "mcpAccessBadge": "MCP {count}",
     "mcpAccessEmpty": "در حال حاضر هیچ MCP اختیاری وجود ندارد.",
-    "mcpAccessTitle": "MCPهای موجود"
+    "mcpAccessTitle": "MCPهای موجود",
+    "registryCount": "{count} عامل",
+    "registryEmpty": "هیچ عامل Registryای با فیلترهای فعلی در دسترس نیست.",
+    "registryRefresh": "نوسازی Registry",
+    "registryRepair": "تعمیر",
+    "registrySearchPlaceholder": "جست‌وجوی عامل ACP Registry...",
+    "filters": {
+      "all": "همه وضعیت‌ها",
+      "enabled": "فقط فعال‌ها",
+      "installed": "فقط نصب‌شده‌ها",
+      "attention": "فقط نیازمند رسیدگی"
+    },
+    "envOverrideTitle": "بازنویسی متغیرهای محیطی",
+    "envOverridePlaceholder": "در هر خط یک KEY=VALUE",
+    "installState": {
+      "installed": "نصب‌شده",
+      "installing": "در حال نصب",
+      "error": "نصب ناموفق",
+      "notInstalled": "نصب‌نشده"
+    },
+    "registryInstallEntry": "نصب عامل",
+    "registryInstallEntryDescription": "عامل‌ها را از ACP Registry جست‌وجو و نصب کنید، سپس برای فعال‌سازی و پیکربندی به اینجا برگردید.",
+    "sharedMcpTitle": "MCP مشترک",
+    "sharedMcpDescription": "همه عامل‌های ACP از یک انتخاب دسترسی MCP مشترک استفاده می‌کنند.",
+    "installedSectionTitle": "عامل‌های نصب‌شده",
+    "installedSectionDescription": "فقط عامل‌های Registry نصب‌شده برای فعال‌سازی، بررسی و بازنویسی متغیرهای محیطی در اینجا نمایش داده می‌شوند.",
+    "installedCount": "{count} نصب‌شده",
+    "installedEmptyTitle": "هنوز هیچ عامل Registryای نصب نشده است",
+    "installedEmptyDescription": "ابتدا یک عامل را از ACP Registry نصب کنید، سپس آن را اینجا پیکربندی کنید.",
+    "registryOverlayEmpty": "هیچ عاملی با فیلترهای فعلی مطابقت ندارد.",
+    "registryInstallAction": "نصب",
+    "registryUninstallAction": "حذف نصب",
+    "registryUninstallConfirm": "عامل «{name}» حذف نصب شود؟",
+    "registryUninstallDescription": "DeepChat این عامل را غیرفعال می‌کند و در صورت وجود، داده‌های نصبِ مدیریت‌شدهٔ محلی را پاک می‌کند. بعداً می‌توانید آن را دوباره از ACP Registry نصب کنید.",
+    "registryUninstallFailed": "حذف نصب عامل ناموفق بود",
+    "registryInstallTitle": "ACP Registry",
+    "registryInstallDescription": "عامل‌های ACP را جست‌وجو، فیلتر و نصب کنید. پس از نصب برای پیکربندی به تنظیمات برگردید.",
+    "registryLearnMore": "اطلاعات بیشتر",
+    "registryRepository": "مخزن",
+    "installFilters": {
+      "all": "همه",
+      "installed": "نصب‌شده",
+      "notInstalled": "نصب‌نشده"
+    }
   },
   "skills": {
     "addSkill": "افزودن مهارت",
@@ -1072,7 +1323,24 @@
       "placeholder": "در اینجا محتوای skill را ویرایش کنید...",
       "readFailed": "خطا در خواندن",
       "success": "با موفقیت ذخیره شد",
-      "title": "ویرایش مهارت"
+      "title": "ویرایش مهارت",
+      "runtimeTitle": "Runtime",
+      "runtimeHint": "Select how bundled scripts resolve Python and Node runtimes.",
+      "pythonRuntime": "Python Runtime",
+      "nodeRuntime": "Node Runtime",
+      "envTitle": "Environment Variables",
+      "envWarning": "Masked in the UI only. Values are stored as plain text in the skill sidecar file.",
+      "scriptsTitle": "Bundled Scripts",
+      "scriptsHint": "Only scripts under scripts/ can be run via skill_run.",
+      "noScripts": "No runnable scripts detected",
+      "scriptEnabled": "Enabled",
+      "scriptDescription": "Description Override",
+      "scriptDescriptionPlaceholder": "Optional description shown to the agent",
+      "runtime": {
+        "auto": "بازگشت خودکار",
+        "system": "رانتایم سیستم",
+        "builtin": "رانتایم داخلی"
+      }
     },
     "empty": "بدون مهارت",
     "emptyHint": "برای نصب skill جدید، روی دکمه «افزودن skill» کلیک کنید.",
@@ -1189,6 +1457,218 @@
       "syncing": "در حال وارد کردن...",
       "title": "ابزارهای خارجی"
     },
-    "title": "مدیریت مهارت‌ها"
+    "title": "مدیریت مهارت‌ها",
+    "card": {
+      "scripts": "{count} scripts",
+      "env": "{count} env",
+      "pythonShort": "Py",
+      "nodeShort": "Node"
+    }
+  },
+  "environments": {
+    "title": "محیط‌ها",
+    "description": "پوشه‌های پروژه‌ای را که نشست‌های شما استفاده کرده‌اند ببینید و آن‌ها را سریع باز کنید یا یکی را برای گفت‌وگوهای جدید به‌عنوان پیش‌فرض تنظیم کنید.",
+    "default": {
+      "title": "پوشه پیش‌فرض",
+      "description": "گفت‌وگوهای جدید این پوشه را از پیش انتخاب می‌کنند، مگر این‌که خودتان پوشه دیگری را دستی انتخاب کنید.",
+      "empty": "هیچ پوشه پیش‌فرضی تنظیم نشده است."
+    },
+    "history": {
+      "title": "تاریخچه",
+      "description": "فقط پوشه‌هایی که واقعاً توسط نشست‌ها استفاده شده‌اند در اینجا نمایش داده می‌شوند."
+    },
+    "temp": {
+      "title": "پوشه‌های Temp",
+      "description": "پوشه‌های زیر ریشه موقت یا workspaceهای مدیریت‌شده توسط برنامه در اینجا گروه‌بندی می‌شوند و به‌صورت پیش‌فرض پنهان هستند."
+    },
+    "actions": {
+      "refresh": "نوسازی",
+      "showMissing": "نمایش پوشه‌های ناموجود",
+      "open": "باز کردن",
+      "setDefault": "تنظیم به‌عنوان پیش‌فرض",
+      "clearDefault": "پاک کردن پیش‌فرض",
+      "showTemp": "نمایش Temp",
+      "hideTemp": "پنهان کردن Temp"
+    },
+    "badges": {
+      "default": "پیش‌فرض",
+      "temp": "Temp",
+      "missing": "وجود ندارد",
+      "notInHistory": "در تاریخچه نیست"
+    },
+    "meta": {
+      "sessions": "{count} نشست",
+      "lastUsed": "آخرین استفاده: {value}",
+      "never": "هرگز"
+    },
+    "empty": {
+      "regular": "هیچ محیطی برای نمایش وجود ندارد.",
+      "temp": "هنوز محیط Temp وجود ندارد."
+    },
+    "errors": {
+      "openTitle": "باز کردن پوشه ناموفق بود"
+    }
+  },
+  "remote": {
+    "title": "کنترل از راه دور",
+    "description": "کنترل از راه دور Telegram و Feishu را در یک‌جا پیکربندی کنید.",
+    "telegram": {
+      "title": "Telegram",
+      "description": "یک ربات تلگرام را برای کنترل از راه دور و ارسال هوک مدیریت کنید.",
+      "botToken": "توکن ربات",
+      "botTokenPlaceholder": "توکن ربات تلگرام"
+    },
+    "remoteControl": {
+      "title": "کنترل از راه دور",
+      "description": "هر نقطهٔ پایانیِ راه دور را به یک نشست DeepChat متصل کنید و آن نشست را بین فرمان‌ها حفظ کنید.",
+      "streamMode": "حالت استریم",
+      "streamModeDraft": "استریم پیش‌نویس",
+      "streamModeFinal": "فقط پاسخ نهایی",
+      "allowedUserIds": "شناسه‌های کاربری مجاز",
+      "allowedUserIdsPlaceholder": "e.g. 123456789, 987654321",
+      "defaultAgent": "ایجنت پیش‌فرض DeepChat",
+      "defaultAgentPlaceholder": "یک ایجنت را انتخاب کنید",
+      "defaultWorkdir": "پوشه پیش‌فرض",
+      "defaultWorkdirPlaceholder": "برای استفاده از پوشه پیش‌فرض سراسری خالی بگذارید",
+      "defaultWorkdirHelper": "وقتی عامل پیش‌فرض ACP باشد استفاده می‌شود. خالی بگذارید تا به پوشه پیش‌فرض سراسری برگردد.",
+      "openPairDialog": "جفت‌سازی",
+      "manageBindings": "مدیریت اتصال‌ها",
+      "pairCode": "کد جفت‌سازی",
+      "noPairCode": "کد جفت‌سازی فعالی وجود ندارد",
+      "generatePairCode": "ایجاد",
+      "clearPairCode": "پاک کردن",
+      "pairCodeExpiresAt": "انقضا در {time}",
+      "pairDialogTitle": "جفت‌سازی تلگرام",
+      "pairDialogDescription": "یک کد جفت‌سازی بسازید و جفت‌سازی را در گفت‌وگوی ربات تلگرام کامل کنید.",
+      "pairDialogInstruction": "این دستور را برای ربات مربوطه بفرستید:",
+      "bindingsDialogTitle": "نشست‌های متصل",
+      "bindingsDialogDescription": "اتصال‌های نشست تلگرام را یکی‌یکی حذف کنید.",
+      "bindingsEmpty": "هنوز اتصال تلگرامی وجود ندارد.",
+      "pairingSuccessTitle": "جفت‌سازی کامل شد",
+      "pairingSuccessDescription": "فهرست شناسه‌های کاربری مجاز تازه‌سازی شد.",
+      "clearBindings": "پاک کردن اتصال‌ها",
+      "clearBindingsResult": "{count} اتصال پاک شد.",
+      "pairDialogInstructionTelegram": "این فرمان را برای ربات Telegram بفرستید:",
+      "pairDialogInstructionFeishu": "این فرمان را در پیام خصوصی برای ربات Feishu بفرستید:"
+    },
+    "hooks": {
+      "title": "هوک‌های تلگرام",
+      "description": "برای اعلان‌های هوک از همان ربات تلگرام استفاده کنید.",
+      "chatId": "شناسه چت",
+      "chatIdPlaceholder": "e.g. 123456789",
+      "threadId": "شناسه رشته (اختیاری)",
+      "threadIdPlaceholder": "شناسه رشته اختیاری"
+    },
+    "status": {
+      "title": "وضعیت اجرا",
+      "botUser": "کاربر ربات: {username} ({id})",
+      "bindings": "اتصال‌ها: {count}، افست واکشی: {pollOffset}",
+      "states": {
+        "disabled": "غیرفعال",
+        "stopped": "متوقف",
+        "starting": "در حال شروع",
+        "running": "در حال اجرا",
+        "backoff": "در حال تلاش مجدد پس از خطا",
+        "error": "خطا"
+      }
+    },
+    "feishu": {
+      "title": "Feishu",
+      "description": "یک ربات Feishu را برای پیام خصوصی، گفت‌وگوی گروهی و رشته‌های موضوعی متصل کنید.",
+      "appId": "شناسه برنامه",
+      "appIdPlaceholder": "شناسه برنامه Feishu",
+      "appSecret": "رمز برنامه",
+      "appSecretPlaceholder": "رمز برنامه Feishu",
+      "verificationToken": "توکن تأیید",
+      "verificationTokenPlaceholder": "توکن تأیید Feishu",
+      "encryptKey": "کلید رمزنگاری (اختیاری)",
+      "encryptKeyPlaceholder": "اگر رمزنگاری رویداد فعال نیست، خالی بگذارید",
+      "botUser": "کاربر ربات: {name} ({openId})",
+      "bindings": "اتصال‌ها: {count}، کاربران جفت‌شده: {pairedUserCount}",
+      "pairedUserOpenIds": "Open ID کاربران جفت‌شده",
+      "pairedUserOpenIdsPlaceholder": "مثلاً ou_xxx، ou_yyy",
+      "accessRulesDescription": "ابتدا در پیام خصوصی جفت‌سازی کنید. در گروه‌ها فقط کاربرانی که جفت شده‌اند و ربات را با {'@'} صدا می‌زنند می‌توانند یک نشست را کنترل کنند.",
+      "accessRule1": "در پیام خصوصی با /pair [کد] جفت‌سازی کنید.",
+      "accessRule2": "در گروه‌ها و موضوع‌ها، ربات فقط وقتی واکنش نشان می‌دهد که یک کاربر جفت‌شده آن را با {'@'} خطاب کند."
+    },
+    "sections": {
+      "credentials": "اعتبارنامه‌ها",
+      "remoteControl": "کنترل از راه دور",
+      "notifications": "اعلان‌ها",
+      "accessRules": "قوانین دسترسی"
+    },
+    "overview": {
+      "telegram": "{bindingCount} اتصال، {pairedCount} کاربر جفت‌شده، hookها {hooks}",
+      "feishu": "{bindingCount} اتصال، {pairedCount} کاربر جفت‌شده",
+      "hooksOn": "روشن",
+      "hooksOff": "خاموش"
+    },
+    "bindingKinds": {
+      "dm": "پیام خصوصی",
+      "group": "گروه",
+      "topic": "موضوع"
+    }
+  },
+  "deepchatAgents": {
+    "title": "ایجنت‌های DeepChat",
+    "description": "ایجنت‌های DeepChat و پیش‌فرض‌هایی را که برای نشست‌های جدید اعمال می‌کنند مدیریت کنید.",
+    "builtIn": "داخلی",
+    "editTitle": "ویرایش ایجنت DeepChat",
+    "createTitle": "ایجاد ایجنت DeepChat",
+    "unnamed": "ایجنت بی‌نام",
+    "name": "نام",
+    "namePlaceholder": "مثلاً: نویسنده / پژوهش / ترجمه",
+    "enabledLabel": "فعال",
+    "descriptionLabel": "توضیحات",
+    "descriptionPlaceholder": "توضیح اختیاری درباره کاربرد این ایجنت",
+    "avatarTitle": "آواتار",
+    "avatarDefault": "پیش‌فرض",
+    "avatarDefaultDesc": "DeepChat از آیکن داخلی خود استفاده می‌کند. ایجنت‌های دیگر از آواتار متنی استفاده می‌کنند.",
+    "avatarLucide": "آیکن Lucide",
+    "avatarLucideDesc": "یک آیکن از Lucide انتخاب کنید و رنگ حالت روشن/تیره را تنظیم کنید.",
+    "avatarMonogram": "حروف نشان",
+    "avatarMonogramDesc": "از دو حرف لاتین یا اولین نویسه چینی/ژاپنی/کره‌ای استفاده کنید.",
+    "lucideIcon": "نام آیکن Lucide",
+    "lightColor": "رنگ حالت روشن",
+    "darkColor": "رنگ حالت تیره",
+    "monogramText": "حروف نشان",
+    "monogramPlaceholder": "مثلاً: WR / 研",
+    "backgroundColor": "رنگ پس‌زمینه",
+    "modelsTitle": "پیش‌فرض‌های مدل",
+    "chatModel": "مدل پیش‌فرض گفتگو",
+    "assistantModel": "مدل دستیار",
+    "visionModel": "مدل بصری",
+    "temperature": "دما",
+    "contextLength": "طول کانتکست",
+    "maxTokens": "حداکثر توکن",
+    "thinkingBudget": "بودجه تفکر",
+    "reasoningEffort": "سطح استدلال",
+    "verbosity": "میزان توضیح",
+    "interleaved": "اجبار به سازگاری با تفکر درهم‌تنیده",
+    "systemPrompt": "پرامپت سیستمی پیش‌فرض",
+    "systemPromptPlaceholder": "برای استفاده از پرامپت سیستمی خالی، اینجا را خالی بگذارید",
+    "defaultProjectPath": "پوشه پیش‌فرض (اختیاری)",
+    "defaultProjectPathPlaceholder": "برای استفاده از پوشه پیش‌فرض سراسری، خالی بگذارید",
+    "permissionMode": "مجوز پیش‌فرض",
+    "permissionFullAccess": "دسترسی کامل",
+    "permissionDefault": "مجوز پیش‌فرض",
+    "toolsTitle": "ابزارهای داخلی",
+    "compactionTitle": "فشرده‌سازی خودکار",
+    "compactionEnabled": "فعال‌سازی فشرده‌سازی خودکار",
+    "compactionDescription": "این پیش‌فرض‌ها فقط بر نشست‌های جدید DeepChat اثر می‌گذارند.",
+    "compactionThreshold": "آستانه فعال‌سازی",
+    "compactionRetainPairs": "نگه‌داری جفت‌های اخیر",
+    "deleteConfirm": "ایجنت «{name}» حذف شود؟ تاریخچه آن به ایجنت داخلی DeepChat برمی‌گردد.",
+    "subagentsTitle": "زیرایجنت‌ها",
+    "subagentsDescription": "اسلات‌های قابل‌استفاده‌مجددِ نشست فرزند را که `subagent_orchestrator` در اختیار می‌گذارد پیکربندی کنید.",
+    "subagentsEnabled": "فعال‌کردن زیرایجنت‌ها",
+    "subagentTargetType": "نوع مقصد",
+    "subagentTargetSelf": "همین ایجنت",
+    "subagentTargetAgent": "ایجنت",
+    "subagentDisplayName": "نام نمایشی",
+    "subagentDescription": "توضیح اسلات",
+    "subagentTargetAgentLabel": "ایجنت مقصد",
+    "subagentLimit": "{count}/{max} اسلات",
+    "addSubagentSlot": "+ افزودن اسلات"
   }
 }

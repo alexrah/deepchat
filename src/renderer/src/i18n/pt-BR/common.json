@@ -18,6 +18,7 @@
   "cancel": "Cancelar",
   "confirm": "Confirmar",
   "close": "Fechar",
+  "open": "Abrir",
   "next": "Próximo",
   "back": "Voltar",
   "error": {
@@ -42,7 +43,8 @@
     "error502": "Erro de gateway, o serviço pode estar instável, tente novamente mais tarde",
     "error503": "Serviço indisponível, o serviço pode estar instável, tente novamente mais tarde",
     "error504": "Tempo limite da requisição, o serviço pode estar instável ou pode haver problemas de rede, verifique as configurações de proxy e tente novamente",
-    "operationFailed": "Operação falhou"
+    "operationFailed": "Operação falhou",
+    "invalidQuestionRequest": "Solicitação de pergunta inválida"
   },
   "resetDataConfirmTitle": "Redefinir Todos os Dados?",
   "resetDataConfirmDescription": "Isso redefinirá todos os seus dados para as configurações padrão. Esta ação não pode ser desfeita.",
@@ -77,7 +79,6 @@
   "save": "Salvar",
   "clear": "Limpar",
   "saved": "Salvo",
-  "newTab": "Nova Aba",
   "unknownError": "Erro desconhecido",
   "testing": "Em teste",
   "saving": "Salvando",
@@ -91,9 +92,25 @@
     "back": "Voltar",
     "forward": "Avançar",
     "reload": "Recarregar",
+    "addressLabel": "Barra de endereços",
     "addressPlaceholder": "Digite uma URL",
     "enterUrlDescription": "Digite o URL na barra de endereço acima para acessar o site",
     "enterUrlToStart": "Digite o URL para começar a visitar",
     "name": "Seu navegador"
+  },
+  "size": {
+    "bytes": "{count} bytes"
+  },
+  "time": {
+    "today": "Hoje",
+    "yesterday": "Ontem",
+    "lastWeek": "Semana passada",
+    "older": "Mais antigos"
+  },
+  "project": {
+    "select": "Selecionar projeto",
+    "none": "Sem projeto",
+    "recent": "Projetos recentes",
+    "openFolder": "Abrir pasta..."
   }
 }

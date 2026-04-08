@@ -1,4 +1,3 @@
-import { presenter } from '@/presenter'
 import {
   Content,
   FunctionCallingConfigMode,
@@ -11,7 +10,6 @@ import {
   Part,
   SafetySetting,
   Tool,
-  GoogleSearch,
   GenerateContentConfig
 } from '@google/genai'
 import { ModelType } from '@shared/model'
@@ -30,6 +28,7 @@ import { BaseLLMProvider, SUMMARY_TITLES_PROMPT } from '../baseProvider'
 import { modelCapabilities } from '../../configPresenter/modelCapabilities'
 import { eventBus, SendTarget } from '@/eventbus'
 import { CONFIG_EVENTS } from '@/events'
+import type { ProviderMcpRuntimePort } from '../runtimePorts'
 
 // Mapping from simple keys to API HarmCategory constants
 const keyToHarmCategoryMap: Record<string, HarmCategory> = {
@@ -53,8 +52,12 @@ const safetySettingKeys = Object.keys(keyToHarmCategoryMap)
 export class GeminiProvider extends BaseLLMProvider {
   private genAI: GoogleGenAI
 
-  constructor(provider: LLM_PROVIDER, configPresenter: IConfigPresenter) {
-    super(provider, configPresenter)
+  constructor(
+    provider: LLM_PROVIDER,
+    configPresenter: IConfigPresenter,
+    mcpRuntime?: ProviderMcpRuntimePort
+  ) {
+    super(provider, configPresenter, mcpRuntime)
     this.genAI = new GoogleGenAI({
       apiKey: this.provider.apiKey,
       httpOptions: { baseUrl: this.provider.baseUrl }
@@ -69,6 +72,22 @@ export class GeminiProvider extends BaseLLMProvider {
   // 确保带有 models/ 前缀
   private ensureGoogleModelName(modelId: string): string {
     return modelId?.startsWith('models/') ? modelId : `models/${modelId}`
+  }
+
+  private buildGeminiStreamEndpoint(modelId: string): string {
+    const baseUrl = (this.provider.baseUrl || 'https://generativelanguage.googleapis.com').replace(
+      /\/+$/,
+      ''
+    )
+    const normalizedModel = this.ensureGoogleModelName(modelId).replace(/^\/+/, '')
+    return `${baseUrl}/v1beta/${normalizedModel}:streamGenerateContent`
+  }
+
+  private buildGeminiTraceHeaders(): Record<string, string> {
+    return {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': this.provider.apiKey || 'MISSING_API_KEY'
+    }
   }
 
   // Implement abstract method fetchProviderModels from BaseLLMProvider
@@ -817,13 +836,9 @@ export class GeminiProvider extends BaseLLMProvider {
     // 添加Gemini工具调用
     let geminiTools: Tool[] = []
 
-    // 注意：googleSearch内置工具与外部工具是互斥的
-    if (modelConfig.enableSearch) {
-      geminiTools.push({ googleSearch: {} as GoogleSearch })
-    } else {
-      if (mcpTools.length > 0)
-        geminiTools = await presenter.mcpPresenter.mcpToolsToGeminiTools(mcpTools, this.provider.id)
-    }
+    // Load MCP tools if available
+    if (mcpTools.length > 0)
+      geminiTools = (await this.mcpRuntime?.mcpToolsToGeminiTools(mcpTools, this.provider.id)) ?? []
 
     // 格式化消息为Gemini格式
     const formattedParts = this.formatGeminiMessages(messages)
@@ -869,13 +884,19 @@ export class GeminiProvider extends BaseLLMProvider {
       config: generateContentConfig
     }
 
-    console.log('requestParams', requestParams)
-
-    // 发送流式请求
-    const result = await this.genAI.models.generateContentStream({
+    const streamRequestParams = {
       ...requestParams,
       model: this.ensureGoogleModelName(requestParams.model as string)
+    }
+
+    await this.emitRequestTrace(modelConfig, {
+      endpoint: this.buildGeminiStreamEndpoint(modelId),
+      headers: this.buildGeminiTraceHeaders(),
+      body: streamRequestParams
     })
+
+    // 发送流式请求
+    const result = await this.genAI.models.generateContentStream(streamRequestParams)
 
     // 状态变量
     let buffer = ''

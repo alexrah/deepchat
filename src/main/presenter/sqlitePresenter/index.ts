@@ -3,7 +3,6 @@ import path from 'path'
 import fs from 'fs'
 import { ConversationsTable } from './tables/conversations'
 import { MessagesTable } from './tables/messages'
-import { AttachmentsTable } from './tables/attachments'
 import {
   ISQLitePresenter,
   SQLITE_MESSAGE,
@@ -14,6 +13,17 @@ import {
 } from '@shared/presenter'
 import { MessageAttachmentsTable } from './tables/messageAttachments'
 import { AcpSessionsTable, type AcpSessionUpsertData } from './tables/acpSessions'
+import { NewEnvironmentsTable } from './tables/newEnvironments'
+import { NewSessionsTable } from './tables/newSessions'
+import { NewProjectsTable } from './tables/newProjects'
+import { DeepChatSessionsTable } from './tables/deepchatSessions'
+import { DeepChatMessagesTable } from './tables/deepchatMessages'
+import { DeepChatMessageTracesTable } from './tables/deepchatMessageTraces'
+import { DeepChatMessageSearchResultsTable } from './tables/deepchatMessageSearchResults'
+import { DeepChatPendingInputsTable } from './tables/deepchatPendingInputs'
+import { DeepChatUsageStatsTable } from './tables/deepchatUsageStats'
+import { LegacyImportStatusTable } from './tables/legacyImportStatus'
+import { AgentsTable } from './tables/agents'
 
 /**
  * 导入模式枚举
@@ -27,9 +37,19 @@ export class SQLitePresenter implements ISQLitePresenter {
   private db!: Database.Database
   private conversationsTable!: ConversationsTable
   private messagesTable!: MessagesTable
-  private attachmentsTable!: AttachmentsTable
   private messageAttachmentsTable!: MessageAttachmentsTable
   private acpSessionsTable!: AcpSessionsTable
+  public newEnvironmentsTable!: NewEnvironmentsTable
+  public newSessionsTable!: NewSessionsTable
+  public newProjectsTable!: NewProjectsTable
+  public deepchatSessionsTable!: DeepChatSessionsTable
+  public deepchatMessagesTable!: DeepChatMessagesTable
+  public deepchatMessageTracesTable!: DeepChatMessageTracesTable
+  public deepchatMessageSearchResultsTable!: DeepChatMessageSearchResultsTable
+  public deepchatPendingInputsTable!: DeepChatPendingInputsTable
+  public deepchatUsageStatsTable!: DeepChatUsageStatsTable
+  public legacyImportStatusTable!: LegacyImportStatusTable
+  public agentsTable!: AgentsTable
   private currentVersion: number = 0
   private dbPath: string
   private password?: string
@@ -101,6 +121,10 @@ export class SQLitePresenter implements ISQLitePresenter {
     return this.messagesTable.deleteAllInConversation(conversationId)
   }
 
+  public getDatabase(): Database.Database {
+    return this.db
+  }
+
   private backupDatabase(): void {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
     const backupPath = `${this.dbPath}.${timestamp}.bak`
@@ -138,16 +162,33 @@ export class SQLitePresenter implements ISQLitePresenter {
   private initTables() {
     this.conversationsTable = new ConversationsTable(this.db)
     this.messagesTable = new MessagesTable(this.db)
-    this.attachmentsTable = new AttachmentsTable(this.db)
     this.messageAttachmentsTable = new MessageAttachmentsTable(this.db)
     this.acpSessionsTable = new AcpSessionsTable(this.db)
+    this.newEnvironmentsTable = new NewEnvironmentsTable(this.db)
+    this.newSessionsTable = new NewSessionsTable(this.db)
+    this.newProjectsTable = new NewProjectsTable(this.db)
+    this.deepchatSessionsTable = new DeepChatSessionsTable(this.db)
+    this.deepchatMessagesTable = new DeepChatMessagesTable(this.db)
+    this.deepchatMessageTracesTable = new DeepChatMessageTracesTable(this.db)
+    this.deepchatMessageSearchResultsTable = new DeepChatMessageSearchResultsTable(this.db)
+    this.deepchatPendingInputsTable = new DeepChatPendingInputsTable(this.db)
+    this.deepchatUsageStatsTable = new DeepChatUsageStatsTable(this.db)
+    this.legacyImportStatusTable = new LegacyImportStatusTable(this.db)
+    this.agentsTable = new AgentsTable(this.db)
 
-    // 创建所有表
-    this.conversationsTable.createTable()
-    this.messagesTable.createTable()
-    this.attachmentsTable.createTable()
-    this.messageAttachmentsTable.createTable()
+    // Create only active tables for the new stack.
     this.acpSessionsTable.createTable()
+    this.newEnvironmentsTable.createTable()
+    this.newSessionsTable.createTable()
+    this.newProjectsTable.createTable()
+    this.deepchatSessionsTable.createTable()
+    this.deepchatMessagesTable.createTable()
+    this.deepchatMessageTracesTable.createTable()
+    this.deepchatMessageSearchResultsTable.createTable()
+    this.deepchatPendingInputsTable.createTable()
+    this.deepchatUsageStatsTable.createTable()
+    this.legacyImportStatusTable.createTable()
+    this.agentsTable.createTable()
   }
 
   private initVersionTable() {
@@ -169,11 +210,18 @@ export class SQLitePresenter implements ISQLitePresenter {
     // 获取所有表的迁移脚本
     const migrations = new Map<number, string[]>()
     const tables = [
-      this.conversationsTable,
-      this.messagesTable,
-      this.attachmentsTable,
-      this.messageAttachmentsTable,
-      this.acpSessionsTable
+      this.acpSessionsTable,
+      this.newEnvironmentsTable,
+      this.newSessionsTable,
+      this.newProjectsTable,
+      this.deepchatSessionsTable,
+      this.deepchatMessagesTable,
+      this.deepchatMessageTracesTable,
+      this.deepchatMessageSearchResultsTable,
+      this.deepchatPendingInputsTable,
+      this.deepchatUsageStatsTable,
+      this.legacyImportStatusTable,
+      this.agentsTable
     ]
 
     // 获取最新的迁移版本
@@ -250,6 +298,34 @@ export class SQLitePresenter implements ISQLitePresenter {
       console.error('Failed to reopen database:', error)
       throw error
     }
+  }
+
+  public async clearNewAgentData(): Promise<void> {
+    await this.runTransaction(() => {
+      // Keep project metadata and legacy import status; clear session/message domain data only.
+      this.db.exec(`
+        DELETE FROM deepchat_message_search_results;
+        DELETE FROM deepchat_message_traces;
+        DELETE FROM deepchat_messages;
+        DELETE FROM deepchat_usage_stats;
+        DELETE FROM deepchat_sessions;
+        DELETE FROM new_environments;
+        DELETE FROM new_sessions;
+      `)
+    })
+  }
+
+  public async importLegacyChatDb(
+    sourceDbPath: string,
+    mode: 'increment' | 'overwrite'
+  ): Promise<{
+    importedSessions: number
+    importedMessages: number
+    importedSearchResults: number
+  }> {
+    const { LegacyChatImportService } = await import('../agentSessionPresenter/legacyImportService')
+    const service = new LegacyChatImportService(this)
+    return await service.importFromSourceDb(sourceDbPath, mode)
   }
 
   // 创建新对话
@@ -397,6 +473,10 @@ export class SQLitePresenter implements ISQLitePresenter {
     return this.messagesTable.getLastUserMessage(conversationId)
   }
 
+  public async getLastAssistantMessage(conversationId: string): Promise<SQLITE_MESSAGE | null> {
+    return this.messagesTable.getLastAssistantMessage(conversationId)
+  }
+
   public async getMainMessageByParentId(
     conversationId: string,
     parentId: string
@@ -435,7 +515,14 @@ export class SQLitePresenter implements ISQLitePresenter {
     agentId: string,
     data: AcpSessionUpsertData
   ): Promise<void> {
+    const affectedPaths = new Set(this.newEnvironmentsTable.listPathsForSession(conversationId))
     await this.acpSessionsTable.upsert(conversationId, agentId, data)
+    for (const path of this.newEnvironmentsTable.listPathsForSession(conversationId)) {
+      affectedPaths.add(path)
+    }
+    for (const path of affectedPaths) {
+      this.newEnvironmentsTable.syncPath(path)
+    }
   }
 
   public async updateAcpSessionId(
@@ -451,7 +538,14 @@ export class SQLitePresenter implements ISQLitePresenter {
     agentId: string,
     workdir: string | null
   ): Promise<void> {
+    const affectedPaths = new Set(this.newEnvironmentsTable.listPathsForSession(conversationId))
     await this.acpSessionsTable.updateWorkdir(conversationId, agentId, workdir)
+    for (const path of this.newEnvironmentsTable.listPathsForSession(conversationId)) {
+      affectedPaths.add(path)
+    }
+    for (const path of affectedPaths) {
+      this.newEnvironmentsTable.syncPath(path)
+    }
   }
 
   public async updateAcpSessionStatus(
@@ -463,10 +557,83 @@ export class SQLitePresenter implements ISQLitePresenter {
   }
 
   public async deleteAcpSessions(conversationId: string): Promise<void> {
+    const affectedPaths = this.newEnvironmentsTable.listPathsForSession(conversationId)
     await this.acpSessionsTable.deleteByConversation(conversationId)
+    for (const path of affectedPaths) {
+      this.newEnvironmentsTable.syncPath(path)
+    }
   }
 
   public async deleteAcpSession(conversationId: string, agentId: string): Promise<void> {
+    const affectedPaths = this.newEnvironmentsTable.listPathsForSession(conversationId)
     await this.acpSessionsTable.deleteByConversationAndAgent(conversationId, agentId)
+    for (const path of affectedPaths) {
+      this.newEnvironmentsTable.syncPath(path)
+    }
+  }
+
+  private hasTable(tableName: string): boolean {
+    const row = this.db
+      .prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`)
+      .get(tableName) as { 1: number } | undefined
+
+    return Boolean(row)
+  }
+
+  private hasColumn(tableName: string, columnName: string): boolean {
+    if (!this.hasTable(tableName)) {
+      return false
+    }
+
+    const rows = this.db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>
+    return rows.some((row) => row.name === columnName)
+  }
+
+  public async migrateAcpAgentReferences(aliasMap: Record<string, string>): Promise<void> {
+    const entries = Object.entries(aliasMap).filter(([from, to]) => from && to && from !== to)
+    if (!entries.length) {
+      return
+    }
+
+    await this.runTransaction(() => {
+      const hasNewSessions = this.hasTable('new_sessions')
+      const hasAcpSessions = this.hasTable('acp_sessions')
+      const hasDeepchatSessionModelRef =
+        this.hasTable('deepchat_sessions') &&
+        this.hasColumn('deepchat_sessions', 'provider_id') &&
+        this.hasColumn('deepchat_sessions', 'model_id')
+
+      for (const [from, to] of entries) {
+        if (hasNewSessions) {
+          this.db.prepare('UPDATE new_sessions SET agent_id = ? WHERE agent_id = ?').run(to, from)
+        }
+
+        if (hasAcpSessions) {
+          this.db
+            .prepare(
+              `DELETE FROM acp_sessions
+               WHERE agent_id = ?
+                 AND EXISTS (
+                   SELECT 1
+                   FROM acp_sessions AS existing
+                   WHERE existing.conversation_id = acp_sessions.conversation_id
+                     AND existing.agent_id = ?
+                 )`
+            )
+            .run(from, to)
+          this.db.prepare('UPDATE acp_sessions SET agent_id = ? WHERE agent_id = ?').run(to, from)
+        }
+
+        if (hasDeepchatSessionModelRef) {
+          this.db
+            .prepare(
+              `UPDATE deepchat_sessions
+               SET model_id = ?
+               WHERE provider_id = 'acp' AND model_id = ?`
+            )
+            .run(to, from)
+        }
+      }
+    })
   }
 }

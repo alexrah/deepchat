@@ -8,6 +8,7 @@ import {
   ModelScopeMcpSyncOptions
 } from '@shared/presenter'
 import { OpenAICompatibleProvider } from './openAICompatibleProvider'
+import type { ProviderMcpRuntimePort } from '../runtimePorts'
 
 // Define interface for ModelScope MCP API response
 export interface ModelScopeMcpServerResponse {
@@ -46,8 +47,12 @@ export interface ModelScopeMcpServer {
 }
 
 export class ModelscopeProvider extends OpenAICompatibleProvider {
-  constructor(provider: LLM_PROVIDER, configPresenter: IConfigPresenter) {
-    super(provider, configPresenter)
+  constructor(
+    provider: LLM_PROVIDER,
+    configPresenter: IConfigPresenter,
+    mcpRuntime?: ProviderMcpRuntimePort
+  ) {
+    super(provider, configPresenter, mcpRuntime)
   }
 
   async completions(
@@ -323,6 +328,7 @@ export class ModelscopeProvider extends OpenAICompatibleProvider {
         `ModelScope MCP Server: ${displayName}`,
       icons: randomEmoji, // Random emoji instead of URL
       autoApprove: ['all'],
+      enabled: false,
       disable: false, // Default to disabled for safety
       type: 'sse' as const, // SSE type for operational servers
       baseUrl: baseUrl, // Use operational URL

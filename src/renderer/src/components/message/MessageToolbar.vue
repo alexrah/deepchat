@@ -38,10 +38,9 @@
 
           <!-- Normal mode buttons -->
           <template v-else>
-            <Tooltip :delayDuration="200">
+            <Tooltip v-if="!isAssistant && !isEditMode && !isReadOnly" :delayDuration="200">
               <TooltipTrigger as-child>
                 <Button
-                  v-show="!isAssistant && !isEditMode"
                   variant="ghost"
                   size="icon"
                   class="w-4 h-4 text-muted-foreground hover:text-primary hover:bg-transparent"
@@ -140,10 +139,9 @@
                 }}
               </TooltipContent>
             </Tooltip>
-            <Tooltip>
+            <Tooltip v-if="isAssistant && !isReadOnly">
               <TooltipTrigger as-child>
                 <Button
-                  v-show="isAssistant"
                   variant="ghost"
                   size="icon"
                   class="w-4 h-4 text-muted-foreground hover:text-primary hover:bg-transparent"
@@ -154,7 +152,7 @@
               </TooltipTrigger>
               <TooltipContent>{{ t('thread.toolbar.retry') }}</TooltipContent>
             </Tooltip>
-            <Tooltip v-if="isAssistant && traceDebugEnabled">
+            <Tooltip v-if="isAssistant && traceDebugEnabled && allowTrace">
               <TooltipTrigger as-child>
                 <Button
                   variant="ghost"
@@ -167,10 +165,9 @@
               </TooltipTrigger>
               <TooltipContent>{{ t('thread.toolbar.trace') }}</TooltipContent>
             </Tooltip>
-            <Tooltip>
+            <Tooltip v-if="isAssistant && !loading && !isInGeneratingThread && !isReadOnly">
               <TooltipTrigger as-child>
                 <Button
-                  v-show="isAssistant && !loading && !isInGeneratingThread"
                   variant="ghost"
                   size="icon"
                   class="w-4 h-4 text-muted-foreground hover:text-primary hover:bg-transparent"
@@ -181,10 +178,9 @@
               </TooltipTrigger>
               <TooltipContent>{{ t('thread.toolbar.fork') }}</TooltipContent>
             </Tooltip>
-            <Tooltip>
+            <Tooltip v-if="!isAssistant && !isEditMode && !isReadOnly">
               <TooltipTrigger as-child>
                 <Button
-                  v-show="!isAssistant && !isEditMode"
                   variant="ghost"
                   size="icon"
                   class="w-4 h-4 text-muted-foreground hover:text-primary hover:bg-transparent"
@@ -195,7 +191,7 @@
               </TooltipTrigger>
               <TooltipContent>{{ t('thread.toolbar.edit') }}</TooltipContent>
             </Tooltip>
-            <Tooltip>
+            <Tooltip v-if="!isReadOnly">
               <TooltipTrigger as-child>
                 <Button
                   variant="ghost"
@@ -308,6 +304,8 @@ const props = defineProps<{
   isEditMode?: boolean
   isInGeneratingThread?: boolean
   isCapturingImage: boolean
+  showTrace?: boolean
+  isReadOnly?: boolean
 }>()
 const emit = defineEmits<{
   (e: 'retry'): void
@@ -326,6 +324,8 @@ const emit = defineEmits<{
 
 const hasTokensPerSecond = computed(() => props.usage.tokens_per_second > 0)
 const hasVariants = computed(() => (props.totalVariants || 0) > 1)
+const allowTrace = computed(() => props.showTrace ?? false)
+const isReadOnly = computed(() => props.isReadOnly === true)
 </script>
 
 <style scoped>

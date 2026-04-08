@@ -6,19 +6,15 @@ const ShiftKey = 'Shift'
 // Below are regular shortcut key definitions
 export const rendererShortcutKey = {
   NewConversation: `${CommandKey}+N`,
+  QuickSearch: `${CommandKey}+P`,
   NewWindow: `${CommandKey}+${ShiftKey}+N`,
-  NewTab: `${CommandKey}+T`,
-  CloseTab: `${CommandKey}+W`,
+  CloseWindow: `${CommandKey}+W`,
   ZoomIn: `${CommandKey}+=`,
   ZoomOut: `${CommandKey}+-`,
   ZoomResume: `${CommandKey}+0`,
   GoSettings: `${CommandKey}+,`,
   CleanChatHistory: `${CommandKey}+L`,
-  DeleteConversation: `${CommandKey}+D`,
-  SwitchNextTab: `${CommandKey}+Tab`,
-  SwitchPrevTab: `${CommandKey}+${ShiftKey}+Tab`,
-  SwtichToLastTab: `${CommandKey}+9`,
-  NumberTabs: `${CommandKey}+1...8`
+  DeleteConversation: `${CommandKey}+D`
 }
 
 // System-level shortcut keys

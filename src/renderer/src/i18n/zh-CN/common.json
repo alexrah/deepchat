@@ -21,6 +21,7 @@
   "disabled": "已禁用",
   "disclaimer": "免责声明",
   "close": "关闭",
+  "open": "打开",
   "image": "图片",
   "error": {
     "requestFailed": "请求失败...",
@@ -44,7 +45,8 @@
     "error502": "网关错误，请求的服务当前可能不太稳定，可以稍后再试试",
     "error503": "服务不可用，请求的服务可能当前不稳定，可以稍后再试试",
     "error504": "请求超时，请求的服务可能当前不稳定或者网络链路有故障，请检查代理等网络配置后再试试",
-    "operationFailed": "操作失败"
+    "operationFailed": "操作失败",
+    "invalidQuestionRequest": "问题请求无效"
   },
   "resetDataConfirmTitle": "确定要重置所有数据吗？",
   "resetDataConfirmDescription": "这将会把所有数据恢复到默认设置。此操作无法撤销。",
@@ -77,7 +79,6 @@
   "save": "保存",
   "clear": "清除",
   "saved": "已保存",
-  "newTab": "新建标签页",
   "unknownError": "未知错误",
   "testing": "测试中",
   "saving": "保存中",
@@ -91,9 +92,25 @@
     "back": "后退",
     "forward": "前进",
     "reload": "刷新",
+    "addressLabel": "地址栏",
     "addressPlaceholder": "输入网址",
     "enterUrlToStart": "输入网址开始访问",
     "enterUrlDescription": "在上方地址栏输入网址以访问网站",
     "name": "Yo Browser"
+  },
+  "size": {
+    "bytes": "{count} 字节"
+  },
+  "time": {
+    "today": "今天",
+    "yesterday": "昨天",
+    "lastWeek": "最近一周",
+    "older": "更早"
+  },
+  "project": {
+    "select": "选择项目",
+    "none": "未关联项目",
+    "recent": "最近项目",
+    "openFolder": "打开文件夹..."
   }
 }

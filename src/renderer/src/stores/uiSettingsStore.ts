@@ -6,6 +6,13 @@ import { buildFontStack, DEFAULT_CODE_FONT_STACK, DEFAULT_TEXT_FONT_STACK } from
 
 const FONT_SIZE_CLASSES = ['text-sm', 'text-base', 'text-lg', 'text-xl', 'text-2xl']
 const DEFAULT_FONT_SIZE_LEVEL = 1
+export const AUTO_COMPACTION_TRIGGER_THRESHOLD_MIN = 5
+export const AUTO_COMPACTION_TRIGGER_THRESHOLD_MAX = 95
+export const AUTO_COMPACTION_TRIGGER_THRESHOLD_STEP = 5
+export const AUTO_COMPACTION_TRIGGER_THRESHOLD_DEFAULT = 80
+export const AUTO_COMPACTION_RETAIN_RECENT_PAIRS_MIN = 1
+export const AUTO_COMPACTION_RETAIN_RECENT_PAIRS_MAX = 10
+export const AUTO_COMPACTION_RETAIN_RECENT_PAIRS_DEFAULT = 2
 
 export const useUiSettingsStore = defineStore('uiSettings', () => {
   const configP = usePresenter('configPresenter')
@@ -16,9 +23,12 @@ export const useUiSettingsStore = defineStore('uiSettings', () => {
   const systemFonts = ref<string[]>([])
   const isLoadingFonts = ref(false)
   const artifactsEffectEnabled = ref(false)
-  const searchPreviewEnabled = ref(true)
+  const autoScrollEnabled = ref(true)
   const contentProtectionEnabled = ref(false)
   const copyWithCotEnabled = ref(true)
+  const autoCompactionEnabled = ref(true)
+  const autoCompactionTriggerThreshold = ref(AUTO_COMPACTION_TRIGGER_THRESHOLD_DEFAULT)
+  const autoCompactionRetainRecentPairs = ref(AUTO_COMPACTION_RETAIN_RECENT_PAIRS_DEFAULT)
   const traceDebugEnabled = ref(false)
   const notificationsEnabled = ref(true)
   const loggingEnabled = ref(false)
@@ -44,7 +54,14 @@ export const useUiSettingsStore = defineStore('uiSettings', () => {
     codeFontFamily.value = (await configP.getCodeFontFamily()) ?? ''
     artifactsEffectEnabled.value =
       (await configP.getSetting<boolean>('artifactsEffectEnabled')) ?? false
-    searchPreviewEnabled.value = await configP.getSearchPreviewEnabled()
+    autoScrollEnabled.value = (await configP.getAutoScrollEnabled()) ?? true
+    autoCompactionEnabled.value = (await configP.getAutoCompactionEnabled()) ?? true
+    autoCompactionTriggerThreshold.value =
+      (await configP.getAutoCompactionTriggerThreshold()) ??
+      AUTO_COMPACTION_TRIGGER_THRESHOLD_DEFAULT
+    autoCompactionRetainRecentPairs.value =
+      (await configP.getAutoCompactionRetainRecentPairs()) ??
+      AUTO_COMPACTION_RETAIN_RECENT_PAIRS_DEFAULT
     contentProtectionEnabled.value = await configP.getContentProtectionEnabled()
     notificationsEnabled.value = (await configP.getSetting<boolean>('notificationsEnabled')) ?? true
     traceDebugEnabled.value = (await configP.getSetting<boolean>('traceDebugEnabled')) ?? false
@@ -87,9 +104,35 @@ export const useUiSettingsStore = defineStore('uiSettings', () => {
     }
   }
 
-  const setSearchPreviewEnabled = async (enabled: boolean) => {
-    searchPreviewEnabled.value = enabled
-    await configP.setSearchPreviewEnabled(enabled)
+  const setAutoScrollEnabled = async (enabled: boolean) => {
+    autoScrollEnabled.value = enabled
+    await configP.setAutoScrollEnabled(enabled)
+  }
+
+  const setAutoCompactionEnabled = async (enabled: boolean) => {
+    autoCompactionEnabled.value = Boolean(enabled)
+    await configP.setAutoCompactionEnabled(autoCompactionEnabled.value)
+  }
+
+  const setAutoCompactionTriggerThreshold = async (threshold: number) => {
+    const rounded =
+      Math.round(threshold / AUTO_COMPACTION_TRIGGER_THRESHOLD_STEP) *
+      AUTO_COMPACTION_TRIGGER_THRESHOLD_STEP
+    const nextValue = Math.min(
+      AUTO_COMPACTION_TRIGGER_THRESHOLD_MAX,
+      Math.max(AUTO_COMPACTION_TRIGGER_THRESHOLD_MIN, rounded)
+    )
+    autoCompactionTriggerThreshold.value = nextValue
+    await configP.setAutoCompactionTriggerThreshold(nextValue)
+  }
+
+  const setAutoCompactionRetainRecentPairs = async (count: number) => {
+    const nextValue = Math.min(
+      AUTO_COMPACTION_RETAIN_RECENT_PAIRS_MAX,
+      Math.max(AUTO_COMPACTION_RETAIN_RECENT_PAIRS_MIN, Math.round(count))
+    )
+    autoCompactionRetainRecentPairs.value = nextValue
+    await configP.setAutoCompactionRetainRecentPairs(nextValue)
   }
 
   const setArtifactsEffectEnabled = async (enabled: boolean) => {
@@ -127,8 +170,8 @@ export const useUiSettingsStore = defineStore('uiSettings', () => {
     window.electron.ipcRenderer.on(CONFIG_EVENTS.FONT_SIZE_CHANGED, (_event, value) => {
       fontSizeLevel.value = value
     })
-    window.electron.ipcRenderer.on(CONFIG_EVENTS.SEARCH_PREVIEW_CHANGED, (_event, value) => {
-      searchPreviewEnabled.value = value
+    window.electron.ipcRenderer.on(CONFIG_EVENTS.AUTO_SCROLL_CHANGED, (_event, value) => {
+      autoScrollEnabled.value = value
     })
     window.electron.ipcRenderer.on(CONFIG_EVENTS.CONTENT_PROTECTION_CHANGED, (_event, value) => {
       contentProtectionEnabled.value = value
@@ -158,7 +201,7 @@ export const useUiSettingsStore = defineStore('uiSettings', () => {
   onBeforeUnmount(() => {
     if (!window?.electron?.ipcRenderer) return
     window.electron.ipcRenderer.removeAllListeners(CONFIG_EVENTS.FONT_SIZE_CHANGED)
-    window.electron.ipcRenderer.removeAllListeners(CONFIG_EVENTS.SEARCH_PREVIEW_CHANGED)
+    window.electron.ipcRenderer.removeAllListeners(CONFIG_EVENTS.AUTO_SCROLL_CHANGED)
     window.electron.ipcRenderer.removeAllListeners(CONFIG_EVENTS.CONTENT_PROTECTION_CHANGED)
     window.electron.ipcRenderer.removeAllListeners(CONFIG_EVENTS.COPY_WITH_COT_CHANGED)
     window.electron.ipcRenderer.removeAllListeners(CONFIG_EVENTS.TRACE_DEBUG_CHANGED)
@@ -177,7 +220,10 @@ export const useUiSettingsStore = defineStore('uiSettings', () => {
     formattedFontFamily,
     formattedCodeFontFamily,
     artifactsEffectEnabled,
-    searchPreviewEnabled,
+    autoScrollEnabled,
+    autoCompactionEnabled,
+    autoCompactionTriggerThreshold,
+    autoCompactionRetainRecentPairs,
     contentProtectionEnabled,
     copyWithCotEnabled,
     traceDebugEnabled,
@@ -188,7 +234,10 @@ export const useUiSettingsStore = defineStore('uiSettings', () => {
     setCodeFontFamily,
     resetFontSettings,
     fetchSystemFonts,
-    setSearchPreviewEnabled,
+    setAutoScrollEnabled,
+    setAutoCompactionEnabled,
+    setAutoCompactionTriggerThreshold,
+    setAutoCompactionRetainRecentPairs,
     setArtifactsEffectEnabled,
     setContentProtectionEnabled,
     setCopyWithCotEnabled,

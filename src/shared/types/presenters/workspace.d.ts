@@ -1,28 +1,13 @@
 /**
  * Workspace Types
- * Types for the generic workspace panel functionality (supports all Agent modes)
+ * Types for the unified right sidepanel workspace experience.
  */
 
-/**
- * Plan entry status
- */
-export type WorkspacePlanStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped'
+export type SidePanelTab = 'workspace' | 'browser'
 
-/**
- * Plan entry - task from Agent
- */
-export type WorkspacePlanEntry = {
-  /** Unique identifier (system generated) */
-  id: string
-  /** Task content description */
-  content: string
-  /** Task status */
-  status: WorkspacePlanStatus
-  /** Priority (optional, from agent) */
-  priority?: string | null
-  /** Update timestamp */
-  updatedAt: number
-}
+export type WorkspaceNavSection = 'artifacts' | 'files' | 'git' | 'subagents'
+
+export type WorkspaceViewMode = 'preview' | 'code'
 
 /**
  * File tree node
@@ -40,43 +25,79 @@ export type WorkspaceFileNode = {
   expanded?: boolean
 }
 
-/**
- * Terminal output snippet - from Agent tool_call terminal output
- */
-export type WorkspaceTerminalStatus = 'running' | 'completed' | 'failed' | 'timed_out' | 'aborted'
+export type WorkspaceFilePreviewKind =
+  | 'text'
+  | 'markdown'
+  | 'html'
+  | 'pdf'
+  | 'svg'
+  | 'image'
+  | 'binary'
 
-export type WorkspaceTerminalSnippet = {
-  /** Unique identifier */
-  id: string
-  /** Execution status */
-  status: WorkspaceTerminalStatus
-  /** Executed command */
-  command: string
-  /** Working directory */
-  cwd?: string
-  /** Output content (truncated) */
-  output: string
-  /** Whether truncated */
-  truncated: boolean
-  /** Exit code (after command completion) */
-  exitCode?: number | null
-  /** Command start time (ms since epoch) */
-  startedAt?: number
-  /** Command end time (ms since epoch) */
-  endedAt?: number
-  /** Duration in milliseconds */
-  durationMs?: number
-  /** Timestamp */
-  timestamp: number
+export type WorkspaceFileMetadata = {
+  fileName: string
+  fileSize: number
+  fileDescription?: string
+  fileCreated: Date
+  fileModified: Date
 }
 
-/**
- * Raw plan entry from agent content mapper
- */
-export type WorkspaceRawPlanEntry = {
+export type WorkspaceFilePreview = {
+  path: string
+  relativePath: string
+  name: string
+  mimeType: string
+  kind: WorkspaceFilePreviewKind
   content: string
-  status?: string | null
-  priority?: string | null
+  previewUrl?: string
+  thumbnail?: string
+  language?: string | null
+  metadata: WorkspaceFileMetadata
+}
+
+export type WorkspaceGitChangeType =
+  | 'modified'
+  | 'added'
+  | 'deleted'
+  | 'renamed'
+  | 'copied'
+  | 'untracked'
+  | 'ignored'
+  | 'unmerged'
+
+export type WorkspaceGitFileChange = {
+  path: string
+  relativePath: string
+  previousPath?: string | null
+  stagedStatus: string | null
+  unstagedStatus: string | null
+  type: WorkspaceGitChangeType
+}
+
+export type WorkspaceGitState = {
+  workspacePath: string
+  branch: string | null
+  ahead: number
+  behind: number
+  changes: WorkspaceGitFileChange[]
+}
+
+export type WorkspaceGitDiff = {
+  workspacePath: string
+  filePath: string | null
+  relativePath: string | null
+  staged: string
+  unstaged: string
+}
+
+export type WorkspaceInvalidationKind = 'fs' | 'git' | 'full'
+
+export type WorkspaceInvalidationSource = 'watcher' | 'fallback' | 'lifecycle'
+
+export type WorkspaceInvalidationEvent = {
+  workspacePath: string
+  kind: WorkspaceInvalidationKind
+  source: WorkspaceInvalidationSource
 }
 
 /**
@@ -108,6 +129,18 @@ export interface IWorkspacePresenter {
   unregisterWorkdir(workdir: string): Promise<void>
 
   /**
+   * Start watching a workspace for file-system and git invalidation events.
+   * @param workspacePath Workspace directory path
+   */
+  watchWorkspace(workspacePath: string): Promise<void>
+
+  /**
+   * Stop watching a workspace.
+   * @param workspacePath Workspace directory path
+   */
+  unwatchWorkspace(workspacePath: string): Promise<void>
+
+  /**
    * Read directory (shallow, only first level)
    * Use expandDirectory to load subdirectory contents
    * @param dirPath Directory path
@@ -135,37 +168,25 @@ export interface IWorkspacePresenter {
   openFile(filePath: string): Promise<void>
 
   /**
-   * Get plan entries for a conversation
-   * @param conversationId Conversation ID
+   * Read a workspace file and normalize it to a preview-friendly payload.
+   * @param filePath Absolute file path
    */
-  getPlanEntries(conversationId: string): Promise<WorkspacePlanEntry[]>
+  readFilePreview(filePath: string): Promise<WorkspaceFilePreview | null>
 
   /**
-   * Update plan entries for a conversation (called internally by Agent events)
-   * @param conversationId Conversation ID
-   * @param entries Raw plan entries from agent
+   * Read git status for the provided workspace path.
+   * Returns null when git is unavailable or the workspace is not a git repo.
+   * @param workspacePath Workspace directory path
    */
-  updatePlanEntries(conversationId: string, entries: WorkspaceRawPlanEntry[]): Promise<void>
+  getGitStatus(workspacePath: string): Promise<WorkspaceGitState | null>
 
   /**
-   * Emit terminal snippet (called internally by Agent events)
-   * @param conversationId Conversation ID
-   * @param snippet Terminal snippet
+   * Read git diff for the provided workspace path and optional file path.
+   * Returns null when git is unavailable or the workspace is not a git repo.
+   * @param workspacePath Workspace directory path
+   * @param filePath Optional absolute file path within the workspace
    */
-  emitTerminalSnippet(conversationId: string, snippet: WorkspaceTerminalSnippet): Promise<void>
-
-  /**
-   * Terminate a running command
-   * @param conversationId Conversation ID
-   * @param snippetId Terminal snippet ID
-   */
-  terminateCommand(conversationId: string, snippetId: string): Promise<void>
-
-  /**
-   * Clear workspace data for a conversation
-   * @param conversationId Conversation ID
-   */
-  clearWorkspaceData(conversationId: string): Promise<void>
+  getGitDiff(workspacePath: string, filePath?: string): Promise<WorkspaceGitDiff | null>
 
   /**
    * Search workspace files by query (query does not include @)

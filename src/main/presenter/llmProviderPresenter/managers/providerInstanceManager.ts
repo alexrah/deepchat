@@ -1,7 +1,6 @@
 import { ProviderBatchUpdate, ProviderChange } from '@shared/provider-operations'
 import { IConfigPresenter, LLM_PROVIDER } from '@shared/presenter'
 import { BaseLLMProvider } from '../baseProvider'
-import { OpenAIProvider } from '../providers/openAIProvider'
 import { DeepseekProvider } from '../providers/deepseekProvider'
 import { SiliconcloudProvider } from '../providers/siliconcloudProvider'
 import { DashscopeProvider } from '../providers/dashscopeProvider'
@@ -34,9 +33,11 @@ import { PoeProvider } from '../providers/poeProvider'
 import { JiekouProvider } from '../providers/jiekouProvider'
 import { ZenmuxProvider } from '../providers/zenmuxProvider'
 import { O3fanProvider } from '../providers/o3fanProvider'
+import { VoiceAIProvider } from '../providers/voiceAIProvider'
 import { RateLimitManager } from './rateLimitManager'
 import { StreamState } from '../types'
-import { AcpSessionPersistence } from '../../agentPresenter/acp'
+import { AcpSessionPersistence } from '../acp'
+import type { ProviderMcpRuntimePort } from '../runtimePorts'
 
 type ProviderConstructor = new (
   provider: LLM_PROVIDER,
@@ -51,6 +52,7 @@ interface ProviderInstanceManagerOptions {
   getCurrentProviderId: () => string | null
   setCurrentProviderId: (providerId: string | null) => void
   acpSessionPersistence?: AcpSessionPersistence
+  mcpRuntime?: ProviderMcpRuntimePort
 }
 
 export class ProviderInstanceManager {
@@ -84,7 +86,8 @@ export class ProviderInstanceManager {
       ['ollama', OllamaProvider],
       ['anthropic', AnthropicProvider],
       ['doubao', DoubaoProvider],
-      ['openai', OpenAIProvider],
+      ['openai', OpenAIResponsesProvider],
+      ['voiceai', VoiceAIProvider],
       ['openai-responses', OpenAIResponsesProvider],
       ['cherryin', CherryInProvider],
       ['lmstudio', LMStudioProvider],
@@ -116,7 +119,9 @@ export class ProviderInstanceManager {
       ['ollama', OllamaProvider],
       ['anthropic', AnthropicProvider],
       ['doubao', DoubaoProvider],
-      ['openai', OpenAIProvider],
+      ['openai', OpenAIResponsesProvider],
+      ['openai-completions', OpenAICompatibleProvider],
+      ['voiceai', VoiceAIProvider],
       ['openai-compatible', OpenAICompatibleProvider],
       ['openai-responses', OpenAIResponsesProvider],
       ['lmstudio', LMStudioProvider],
@@ -405,11 +410,12 @@ export class ProviderInstanceManager {
         return new AcpProvider(
           provider,
           this.options.configPresenter,
-          this.options.acpSessionPersistence
+          this.options.acpSessionPersistence,
+          this.options.mcpRuntime
         )
       }
 
-      return new ProviderClass(provider, this.options.configPresenter)
+      return new ProviderClass(provider, this.options.configPresenter, this.options.mcpRuntime)
     } catch (error) {
       console.error(`Failed to create provider instance for ${provider.id}:`, error)
       return undefined

@@ -2,7 +2,13 @@
 <template>
   <template v-for="(part, index) in processedContent" :key="index">
     <!-- 使用结构化渲染器替代 v-html -->
-    <MarkdownRenderer v-if="part.type === 'text'" :content="part.content" :loading="part.loading" />
+    <MarkdownRenderer
+      v-if="part.type === 'text'"
+      :content="part.content"
+      :loading="part.loading"
+      :message-id="messageId"
+      :thread-id="threadId"
+    />
 
     <ArtifactThinking v-else-if="part.type === 'thinking' && part.loading" />
     <div v-else-if="part.type === 'artifact' && part.artifact" class="my-1">
@@ -26,9 +32,9 @@
 import { ref, nextTick, watch, onMounted } from 'vue'
 
 import { usePresenter } from '@/composables/usePresenter'
-import { SearchResult } from '@shared/presenter'
+import type { SearchResult } from '@shared/types/core/search'
 
-const sessionPresenter = usePresenter('sessionPresenter')
+const agentSessionPresenter = usePresenter('agentSessionPresenter')
 const searchResults = ref<SearchResult[]>([])
 
 import ArtifactThinking from '../artifacts/ArtifactThinking.vue'
@@ -37,10 +43,11 @@ import ToolCallPreview from '../artifacts/ToolCallPreview.vue'
 import { useBlockContent } from '@/composables/useArtifacts'
 import { useArtifactStore } from '@/stores/artifact'
 import MarkdownRenderer from '@/components/markdown/MarkdownRenderer.vue'
-import { AssistantMessageBlock } from '@shared/chat'
+import type { DisplayAssistantMessageBlock } from '@/components/chat/messageListItems'
+
 const artifactStore = useArtifactStore()
 const props = defineProps<{
-  block: AssistantMessageBlock
+  block: DisplayAssistantMessageBlock
   messageId: string
   threadId: string
   isSearchResult?: boolean
@@ -60,38 +67,33 @@ watch(
         const { content, loading } = part
         if (props.block.status === 'loading') {
           const status = loading ? 'loading' : 'loaded'
-          if (artifactStore.currentArtifact?.id === artifact.identifier) {
-            // Use updateArtifactContent to trigger reactivity
-            artifactStore.updateArtifactContent({
-              content,
-              title,
-              type,
-              status
-            })
+          const nextArtifact = {
+            id: artifact.identifier,
+            type,
+            title,
+            language: artifact.language,
+            content,
+            status
+          } as const
+
+          if (loading) {
+            artifactStore.syncArtifact(nextArtifact, props.messageId, props.threadId)
           } else {
-            artifactStore.showArtifact(
-              {
-                id: artifact.identifier,
-                type,
-                title,
-                language: artifact.language,
-                content,
-                status
-              },
-              props.messageId,
-              props.threadId
-            )
+            artifactStore.completeArtifact(nextArtifact, props.messageId, props.threadId)
           }
         } else {
-          if (artifactStore.currentArtifact?.id === artifact.identifier) {
-            // Use updateArtifactContent to trigger reactivity
-            artifactStore.updateArtifactContent({
-              content,
-              title: artifact.title,
+          artifactStore.completeArtifact(
+            {
+              id: artifact.identifier,
               type,
+              title: artifact.title,
+              language: artifact.language,
+              content,
               status: 'loaded'
-            })
-          }
+            },
+            props.messageId,
+            props.threadId
+          )
         }
       }
     })
@@ -101,7 +103,8 @@ watch(
 
 onMounted(async () => {
   if (props.isSearchResult) {
-    searchResults.value = await sessionPresenter.getSearchResults(props.messageId)
+    // TODO: remove this temporary fallback after search result loading is fully unified.
+    searchResults.value = await agentSessionPresenter.getSearchResults(props.messageId)
   }
 })
 </script>

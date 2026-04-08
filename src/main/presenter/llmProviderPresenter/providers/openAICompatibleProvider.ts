@@ -11,6 +11,7 @@ import {
   IConfigPresenter
 } from '@shared/presenter'
 import { ApiEndpointType } from '@shared/model'
+import { DEFAULT_MODEL_CONTEXT_LENGTH, DEFAULT_MODEL_MAX_TOKENS } from '@shared/modelConfigDefaults'
 import { createStreamEvent } from '@shared/types/core/llm-events'
 import { BaseLLMProvider, SUMMARY_TITLES_PROMPT } from '../baseProvider'
 import OpenAI, { AzureOpenAI } from 'openai'
@@ -31,6 +32,12 @@ import sharp from 'sharp'
 import { proxyConfig } from '../../proxyConfig'
 import { modelCapabilities } from '../../configPresenter/modelCapabilities'
 import { ProxyAgent } from 'undici'
+import type { ProviderMcpRuntimePort } from '../runtimePorts'
+import {
+  applyOpenAIChatExplicitCacheBreakpoint,
+  applyOpenAIPromptCacheKey,
+  resolvePromptCachePlan
+} from '../promptCacheStrategy'
 
 const OPENAI_REASONING_MODELS = [
   'o4-mini',
@@ -64,14 +71,64 @@ const SUPPORTED_IMAGE_SIZES = {
 // Add list of models with configurable sizes
 const SIZE_CONFIGURABLE_MODELS = ['gpt-image-1', 'gpt-4o-image', 'gpt-4o-all']
 
+export function normalizeExtractedImageText(content: string): string {
+  const normalized = content
+    .replace(/\r\n/g, '\n')
+    .replace(/\n\s*\n/g, '\n')
+    .trim()
+  if (!normalized) {
+    return ''
+  }
+
+  const semanticText = normalized.replace(/[\`*_~!\[\]\(\)]/g, '').trim()
+  return semanticText.length > 0 ? normalized : ''
+}
+
+function getOpenAIChatCachedTokens(usage: unknown): number | undefined {
+  return getOpenAIChatUsageDetail(usage, 'cached_tokens')
+}
+
+function getOpenAIChatCacheWriteTokens(usage: unknown): number | undefined {
+  return getOpenAIChatUsageDetail(usage, 'cache_write_tokens')
+}
+
+function getOpenAIChatUsageDetail(
+  usage: unknown,
+  key: 'cached_tokens' | 'cache_write_tokens'
+): number | undefined {
+  if (!usage || typeof usage !== 'object') {
+    return undefined
+  }
+
+  const promptTokensDetails = (usage as { prompt_tokens_details?: unknown }).prompt_tokens_details
+  const inputTokensDetails = (usage as { input_tokens_details?: unknown }).input_tokens_details
+  const promptCachedTokens =
+    promptTokensDetails && typeof promptTokensDetails === 'object'
+      ? (promptTokensDetails as Record<string, unknown>)[key]
+      : undefined
+  const inputCachedTokens =
+    inputTokensDetails && typeof inputTokensDetails === 'object'
+      ? (inputTokensDetails as Record<string, unknown>)[key]
+      : undefined
+  const cachedTokens =
+    typeof promptCachedTokens === 'number' ? promptCachedTokens : inputCachedTokens
+  return typeof cachedTokens === 'number' && Number.isFinite(cachedTokens)
+    ? cachedTokens
+    : undefined
+}
+
 export class OpenAICompatibleProvider extends BaseLLMProvider {
   protected openai!: OpenAI
   protected isNoModelsApi: boolean = false
   // Add blacklist of providers that don't support OpenAI standard interface
   private static readonly NO_MODELS_API_LIST: string[] = []
 
-  constructor(provider: LLM_PROVIDER, configPresenter: IConfigPresenter) {
-    super(provider, configPresenter)
+  constructor(
+    provider: LLM_PROVIDER,
+    configPresenter: IConfigPresenter,
+    mcpRuntime?: ProviderMcpRuntimePort
+  ) {
+    super(provider, configPresenter, mcpRuntime)
     this.createOpenAIClient()
     if (OpenAICompatibleProvider.NO_MODELS_API_LIST.includes(this.provider.id.toLowerCase())) {
       this.isNoModelsApi = true
@@ -85,6 +142,30 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
 
   private supportsVerbosityParameter(modelId: string): boolean {
     return modelCapabilities.supportsVerbosity(this.provider.id, modelId)
+  }
+
+  private resolveTraceAuthToken(): string {
+    return this.provider.oauthToken || this.provider.apiKey || 'MISSING_API_KEY'
+  }
+
+  private buildChatCompletionsTraceHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...this.defaultHeaders
+    }
+
+    if (this.provider.id === 'azure-openai') {
+      headers['api-key'] = this.resolveTraceAuthToken()
+    } else {
+      headers.Authorization = `Bearer ${this.resolveTraceAuthToken()}`
+    }
+
+    return headers
+  }
+
+  private buildChatCompletionsEndpoint(): string {
+    const baseUrl = (this.provider.baseUrl || 'https://api.openai.com/v1').replace(/\/+$/, '')
+    return `${baseUrl}/chat/completions`
   }
 
   private getEffectiveApiEndpoint(modelId: string): ApiEndpointType {
@@ -255,8 +336,8 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
       group: 'default',
       providerId: this.provider.id,
       isCustom: false,
-      contextLength: 4096,
-      maxTokens: 2048
+      contextLength: DEFAULT_MODEL_CONTEXT_LENGTH,
+      maxTokens: DEFAULT_MODEL_MAX_TOKENS
     }))
   }
 
@@ -703,7 +784,7 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
     const modelConfig = this.configPresenter.getModelConfig(modelId, this.provider.id)
     const supportsFunctionCall = modelConfig?.functionCall || false
 
-    const requestParams: OpenAI.Chat.ChatCompletionCreateParams = {
+    const requestParams: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
       messages: this.formatMessages(messages, supportsFunctionCall),
       model: modelId,
       stream: false,
@@ -716,12 +797,27 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
         ? { max_completion_tokens: maxTokens }
         : { max_tokens: maxTokens })
     }
+    const promptCachePlan = resolvePromptCachePlan({
+      providerId: this.provider.id,
+      apiType: 'openai_chat',
+      modelId,
+      messages: requestParams.messages as unknown[],
+      conversationId: modelConfig?.conversationId
+    })
+    requestParams.messages = applyOpenAIChatExplicitCacheBreakpoint(
+      requestParams.messages as ChatCompletionMessageParam[],
+      promptCachePlan
+    )
     OPENAI_REASONING_MODELS.forEach((noTempId) => {
       if (modelId.startsWith(noTempId)) {
         delete requestParams.temperature
       }
     })
-    const completion = await this.openai.chat.completions.create(requestParams)
+    const cachedRequestParams = applyOpenAIPromptCacheKey(
+      requestParams as unknown as Record<string, unknown>,
+      promptCachePlan
+    ) as unknown as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming
+    const completion = await this.openai.chat.completions.create(cachedRequestParams)
 
     const message = completion.choices[0].message as ChatCompletionMessage & {
       reasoning_content?: string
@@ -946,7 +1042,9 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
             yield createStreamEvent.usage({
               prompt_tokens: result.usage.input_tokens || 0,
               completion_tokens: result.usage.output_tokens || 0,
-              total_tokens: result.usage.total_tokens || 0
+              total_tokens: result.usage.total_tokens || 0,
+              cached_tokens: getOpenAIChatCachedTokens(result.usage),
+              cache_write_tokens: getOpenAIChatCacheWriteTokens(result.usage)
             })
           }
 
@@ -1011,11 +1109,11 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
     // 如果支持原生函数调用，则转换工具定义为 OpenAI 格式
     const apiTools =
       tools.length > 0 && supportsFunctionCall
-        ? await presenter.mcpPresenter.mcpToolsToOpenAITools(tools, this.provider.id)
+        ? await this.mcpRuntime?.mcpToolsToOpenAITools(tools, this.provider.id)
         : undefined
 
     // 构建请求参数
-    const requestParams: OpenAI.Chat.ChatCompletionCreateParams = {
+    const requestParams: OpenAI.Chat.ChatCompletionCreateParamsStreaming = {
       messages: processedMessages,
       model: modelId,
       stream: true,
@@ -1066,9 +1164,32 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
     // 如果存在 API 工具且支持函数调用，则添加到请求参数中
     if (apiTools && apiTools.length > 0 && supportsFunctionCall) requestParams.tools = apiTools
 
+    const promptCachePlan = resolvePromptCachePlan({
+      providerId: this.provider.id,
+      apiType: 'openai_chat',
+      modelId,
+      messages: processedMessages as unknown[],
+      tools,
+      conversationId: modelConfig?.conversationId
+    })
+    requestParams.messages = applyOpenAIChatExplicitCacheBreakpoint(
+      requestParams.messages as ChatCompletionMessageParam[],
+      promptCachePlan
+    )
+    const cachedRequestParams = applyOpenAIPromptCacheKey(
+      requestParams as unknown as Record<string, unknown>,
+      promptCachePlan
+    ) as unknown as OpenAI.Chat.ChatCompletionCreateParamsStreaming
+
+    await this.emitRequestTrace(modelConfig, {
+      endpoint: this.buildChatCompletionsEndpoint(),
+      headers: this.buildChatCompletionsTraceHeaders(),
+      body: cachedRequestParams
+    })
+
     // console.log('[handleChatCompletion] requestParams', JSON.stringify(requestParams))
     // 发起 OpenAI 聊天补全请求
-    const stream = await this.openai.chat.completions.create(requestParams)
+    const stream = await this.openai.chat.completions.create(cachedRequestParams)
 
     //-----------------------------------------------------------------------------------------------------
     // 流处理状态定义 (已将相关变量声明提升到顶部，确保可见性)
@@ -1106,6 +1227,8 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
           prompt_tokens: number
           completion_tokens: number
           total_tokens: number
+          cached_tokens?: number
+          cache_write_tokens?: number
         }
       | undefined = undefined
 
@@ -1120,7 +1243,11 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
 
       // 1. 处理非内容事件 (如 usage, reasoning, tool_calls)
       if (chunk.usage) {
-        usage = chunk.usage
+        usage = {
+          ...chunk.usage,
+          cached_tokens: getOpenAIChatCachedTokens(chunk.usage),
+          cache_write_tokens: getOpenAIChatCacheWriteTokens(chunk.usage)
+        }
       }
 
       // 原生 reasoning 内容处理（直接产出）
@@ -1231,7 +1358,7 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
           // 如果处理了图片，清理多余的空行并记录日志
           if (hasImages) {
             // 清理移除图片后可能留下的多余空行
-            processedCurrentContent = processedCurrentContent.replace(/\n\s*\n/g, '\n').trim()
+            processedCurrentContent = normalizeExtractedImageText(processedCurrentContent)
             console.log(
               `[handleChatCompletion] Processed ${currentContent.length} chars -> ${processedCurrentContent.length} chars (images removed)`
             )
@@ -1946,102 +2073,6 @@ export class OpenAICompatibleProvider extends BaseLLMProvider {
             }`
           )
         }
-    }
-  }
-
-  /**
-   * Get request preview for debugging (DEV mode only)
-   * Builds the actual request parameters without sending the request
-   */
-  public async getRequestPreview(
-    messages: ChatMessage[],
-    modelId: string,
-    modelConfig: ModelConfig,
-    temperature: number,
-    maxTokens: number,
-    mcpTools: MCPToolDefinition[]
-  ): Promise<{
-    endpoint: string
-    headers: Record<string, string>
-    body: unknown
-  }> {
-    const tools = mcpTools || []
-    const supportsFunctionCall = modelConfig?.functionCall || false
-    let processedMessages = [
-      ...this.formatMessages(messages, supportsFunctionCall)
-    ] as ChatCompletionMessageParam[]
-
-    // Prepare non-native function call prompt if needed
-    if (tools.length > 0 && !supportsFunctionCall) {
-      processedMessages = this.prepareFunctionCallPrompt(processedMessages, tools)
-    }
-
-    // Convert tools to OpenAI format if native support
-    const apiTools =
-      tools.length > 0 && supportsFunctionCall
-        ? await presenter.mcpPresenter.mcpToolsToOpenAITools(tools, this.provider.id)
-        : undefined
-
-    // Build request params (same logic as handleChatCompletion)
-    const requestParams: OpenAI.Chat.ChatCompletionCreateParams = {
-      messages: processedMessages,
-      model: modelId,
-      stream: true,
-      temperature,
-      ...(modelId.startsWith('o1') ||
-      modelId.startsWith('o3') ||
-      modelId.startsWith('o4') ||
-      modelId.includes('gpt-4.1') ||
-      modelId.includes('gpt-5')
-        ? { max_completion_tokens: maxTokens }
-        : { max_tokens: maxTokens })
-    }
-
-    requestParams.stream_options = { include_usage: true }
-
-    if (this.provider.id.toLowerCase().includes('dashscope')) {
-      requestParams.response_format = { type: 'text' }
-    }
-
-    if (
-      this.provider.id.toLowerCase().includes('openrouter') &&
-      modelId.startsWith('deepseek/deepseek-chat-v3-0324:free')
-    ) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ;(requestParams as any).provider = {
-        only: ['chutes']
-      }
-    }
-
-    if (modelConfig.reasoningEffort && this.supportsEffortParameter(modelId)) {
-      ;(requestParams as any).reasoning_effort = modelConfig.reasoningEffort
-    }
-
-    if (modelConfig.verbosity && this.supportsVerbosityParameter(modelId)) {
-      ;(requestParams as any).verbosity = modelConfig.verbosity
-    }
-
-    OPENAI_REASONING_MODELS.forEach((noTempId) => {
-      if (modelId.startsWith(noTempId)) delete requestParams.temperature
-    })
-
-    if (apiTools && apiTools.length > 0 && supportsFunctionCall) requestParams.tools = apiTools
-
-    // Build headers
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${this.provider.apiKey || 'MISSING_API_KEY'}`,
-      ...this.defaultHeaders
-    }
-
-    // Determine endpoint
-    const baseUrl = this.provider.baseUrl || 'https://api.openai.com/v1'
-    const endpoint = `${baseUrl}/chat/completions`
-
-    return {
-      endpoint,
-      headers,
-      body: requestParams
     }
   }
 }

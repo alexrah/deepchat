@@ -55,8 +55,8 @@ export type AssistantMessageBlock = {
     | 'tool_call'
     | 'action'
     | 'image'
+    | 'audio'
     | 'artifact-thinking'
-    | 'mcp_ui_resource'
   content?: string
   extra?: Record<string, string | number | object[] | boolean>
   status:
@@ -82,23 +82,23 @@ export type AssistantMessageBlock = {
       | 'application/vnd.ant.react'
     language?: string
   }
-  mcp_ui_resource?: {
-    uri: string
-    mimeType: 'text/html' | 'text/uri-list' | 'application/vnd.mcp-ui.remote-dom'
-    text?: string
-    blob?: string
-    _meta?: Record<string, unknown>
-  }
   tool_call?: {
     id?: string
     name?: string
     params?: string
     response?: string
+    rtkApplied?: boolean
+    rtkMode?: 'rewrite' | 'direct' | 'bypass'
+    rtkFallbackReason?: string
     server_name?: string
     server_icons?: string
     server_description?: string
   }
-  action_type?: 'tool_call_permission' | 'maximum_tool_calls_reached' | 'rate_limit'
+  action_type?:
+    | 'tool_call_permission'
+    | 'maximum_tool_calls_reached'
+    | 'rate_limit'
+    | 'question_request'
   image_data?: { data: string; mimeType: string }
   reasoning_time?: { start: number; end: number }
 }

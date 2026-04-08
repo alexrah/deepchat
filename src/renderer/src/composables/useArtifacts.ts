@@ -1,5 +1,6 @@
-import { AssistantMessageBlock } from '@shared/chat'
 import { computed } from 'vue'
+import type { DisplayAssistantMessageBlock } from '@/components/chat/messageListItems'
+
 export interface ProcessedPart {
   type: 'text' | 'thinking' | 'artifact' | 'tool_call'
   content: string
@@ -23,6 +24,21 @@ export interface ProcessedPart {
   }
 }
 
+export interface ParsedArtifactPart {
+  identifier: string
+  title: string
+  type:
+    | 'application/vnd.ant.code'
+    | 'text/markdown'
+    | 'text/html'
+    | 'image/svg+xml'
+    | 'application/vnd.ant.mermaid'
+    | 'application/vnd.ant.react'
+  language?: string
+  content: string
+  loading: boolean
+}
+
 // 定义可接受的artifact类型
 type ArtifactType =
   | 'application/vnd.ant.code'
@@ -31,16 +47,46 @@ type ArtifactType =
   | 'image/svg+xml'
   | 'application/vnd.ant.mermaid'
   | 'application/vnd.ant.react'
-export const useBlockContent = (props: { block: AssistantMessageBlock }) => {
+type ArtifactSourceBlock = Pick<DisplayAssistantMessageBlock, 'content' | 'status'>
+
+export const useBlockContent = (props: { block: ArtifactSourceBlock }) => {
+  const blockContent = computed(() =>
+    typeof props.block.content === 'string' ? props.block.content : ''
+  )
   const processedContent = computed<ProcessedPart[]>(() =>
-    props.block.content
-      ? generatePart(props.block.content, props.block.status)
+    blockContent.value
+      ? generatePart(blockContent.value, props.block.status)
       : [{ type: 'text', content: '' }]
   )
 
   return {
     processedContent
   }
+}
+
+export function extractArtifactsFromContent(
+  content: string,
+  status: DisplayAssistantMessageBlock['status']
+): ParsedArtifactPart[] {
+  return generatePart(content, status)
+    .filter(
+      (
+        part
+      ): part is ProcessedPart & {
+        type: 'artifact'
+        artifact: NonNullable<ProcessedPart['artifact']>
+      } => {
+        return part.type === 'artifact' && Boolean(part.artifact)
+      }
+    )
+    .map((part) => ({
+      identifier: part.artifact.identifier,
+      title: part.artifact.title,
+      type: part.artifact.type,
+      language: part.artifact.language,
+      content: part.content,
+      loading: Boolean(part.loading)
+    }))
 }
 
 // 辅助函数：解析标签属性
@@ -58,7 +104,10 @@ function parseAttributes(attributesStr?: string): Record<string, string> {
   return attributes
 }
 
-function generatePart(content: string, status: AssistantMessageBlock['status']): ProcessedPart[] {
+function generatePart(
+  content: string,
+  status: DisplayAssistantMessageBlock['status']
+): ProcessedPart[] {
   const parts: ProcessedPart[] = []
 
   // 定义所有可能的标签匹配模式

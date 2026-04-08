@@ -1,21 +1,13 @@
-import type { BrowserTabInfo, BrowserToolDefinition } from '@shared/types/browser'
+import type { BrowserToolDefinition, YoBrowserStatus } from '@shared/types/browser'
 
 export class BrowserContextBuilder {
-  static buildSystemPrompt(tabs: BrowserTabInfo[], activeTabId: string | null): string {
-    const activeTab = tabs.find((tab) => tab.id === activeTabId)
-    const tabLines =
-      tabs.length === 0
-        ? ['- No tabs open.']
-        : tabs.map((tab) => {
-            const marker = tab.id === activeTabId ? '*' : ' '
-            const title = tab.title || tab.url || 'Untitled'
-            return `${marker} ${title} (${tab.url || 'about:blank'})`
-          })
+  static buildSystemPrompt(status: YoBrowserStatus): string {
+    const page = status.page
+    const pageLine = page ? `${page.title || page.url || 'Untitled'} (${page.url})` : 'none'
+
     return [
       'Yo Browser is available for web exploration.',
-      `Active tab: ${activeTab ? `${activeTab.title || activeTab.url} (${activeTab.id})` : 'none'}`,
-      'Open tabs:',
-      ...tabLines,
+      `Current page: ${pageLine}`,
       'Use Yo Browser to browse, extract DOM, run scripts, capture screenshots, and download files.'
     ].join('\n')
   }

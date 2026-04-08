@@ -9,29 +9,31 @@ import {
   MCPToolDefinition
 } from '@shared/presenter'
 import { ModelType } from '@shared/model'
+import {
+  resolveModelContextLength,
+  resolveModelFunctionCall,
+  resolveModelMaxTokens
+} from '@shared/modelConfigDefaults'
 import { OpenAICompatibleProvider } from './openAICompatibleProvider'
 import { providerDbLoader } from '../../configPresenter/providerDbLoader'
-import { modelCapabilities } from '../../configPresenter/modelCapabilities'
+import type { ProviderMcpRuntimePort } from '../runtimePorts'
+
+const DOUBAO_THINKING_NOTE = 'doubao-thinking-parameter'
 
 export class DoubaoProvider extends OpenAICompatibleProvider {
-  // List of models that support thinking parameter
-  private static readonly THINKING_MODELS: string[] = [
-    'deepseek-v3-1-250821',
-    'doubao-seed-1-6-vision-250815',
-    'doubao-seed-1-6-250615',
-    'doubao-seed-1-6-flash-250615',
-    'doubao-1-5-thinking-vision-pro-250428',
-    'doubao-1-5-ui-tars-250428',
-    'doubao-1-5-thinking-pro-m-250428'
-  ]
-
-  constructor(provider: LLM_PROVIDER, configPresenter: IConfigPresenter) {
+  constructor(
+    provider: LLM_PROVIDER,
+    configPresenter: IConfigPresenter,
+    mcpRuntime?: ProviderMcpRuntimePort
+  ) {
     // Initialize Doubao model configuration
-    super(provider, configPresenter)
+    super(provider, configPresenter, mcpRuntime)
   }
 
   private supportsThinking(modelId: string): boolean {
-    return DoubaoProvider.THINKING_MODELS.includes(modelId)
+    const model = providerDbLoader.getModel(this.provider.id, modelId)
+    const notes = model?.extra_capabilities?.reasoning?.notes
+    return Array.isArray(notes) && notes.includes(DOUBAO_THINKING_NOTE)
   }
 
   /**
@@ -83,8 +85,7 @@ export class DoubaoProvider extends OpenAICompatibleProvider {
   }
 
   protected async fetchOpenAIModels(): Promise<MODEL_META[]> {
-    const resolvedId = modelCapabilities.resolveProviderId(this.provider.id) || this.provider.id
-    const provider = providerDbLoader.getProvider(resolvedId)
+    const provider = providerDbLoader.getProvider(this.provider.id)
     if (!provider || !Array.isArray(provider.models)) {
       return []
     }
@@ -102,10 +103,10 @@ export class DoubaoProvider extends OpenAICompatibleProvider {
         group: 'default',
         providerId: this.provider.id,
         isCustom: false,
-        contextLength: model.limit?.context ?? 8192,
-        maxTokens: model.limit?.output ?? 4096,
+        contextLength: resolveModelContextLength(model.limit?.context),
+        maxTokens: resolveModelMaxTokens(model.limit?.output),
         vision: hasImageInput,
-        functionCall: Boolean(model.tool_call),
+        functionCall: resolveModelFunctionCall(model.tool_call),
         reasoning: Boolean(model.reasoning?.supported),
         enableSearch: Boolean(model.search?.supported),
         type: modelType

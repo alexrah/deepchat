@@ -2,6 +2,18 @@ import { defineConfig } from 'vitest/config'
 import { resolve } from 'path'
 import vue from '@vitejs/plugin-vue'
 
+const isCustomElement = (tag: string) =>
+  tag === 'voice-agent-widget' || tag.startsWith('ui-resource-renderer')
+
+const vuePlugin = () =>
+  vue({
+    template: {
+      compilerOptions: {
+        isCustomElement
+      }
+    }
+  })
+
 export default defineConfig({
   test: {
     globals: true,
@@ -9,7 +21,7 @@ export default defineConfig({
     // This allows each test suite to use the correct alias resolution
     projects: [
       {
-        plugins: [vue()],
+        plugins: [vuePlugin()],
         test: {
           name: 'renderer',
           environment: 'jsdom',
@@ -21,7 +33,7 @@ export default defineConfig({
           alias: [
             // Renderer process aliases (match electron.vite.config.ts renderer config)
             { find: '@/', replacement: resolve('src/renderer/src/') + '/' },
-            { find: '@shell', replacement: resolve('src/renderer/shell/') },
+            { find: '@browser', replacement: resolve('src/renderer/browser/') },
             { find: '@shared', replacement: resolve('src/shared') },
             { find: '@shadcn', replacement: resolve('src/shadcn') },
             { find: 'electron', replacement: resolve('test/mocks/electron.ts') },
@@ -30,7 +42,7 @@ export default defineConfig({
         }
       },
       {
-        plugins: [vue()],
+        plugins: [vuePlugin()],
         test: {
           name: 'main',
           environment: 'node',

@@ -1,4 +1,5 @@
 import { AssistantMessageBlock, Message } from '../../chat'
+import type { SearchResult } from '../core/search'
 
 /**
  * Thread/Conversation Presenter Interface
@@ -21,7 +22,7 @@ export type CONVERSATION_SETTINGS = {
   reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high'
   verbosity?: 'low' | 'medium' | 'high'
   acpWorkdirMap?: Record<string, string | null>
-  chatMode?: 'chat' | 'agent' | 'acp agent'
+  chatMode?: 'agent' | 'acp agent'
   agentWorkspacePath?: string | null
   selectedVariantsMap?: Record<string, string>
   activeSkills?: string[]
@@ -82,24 +83,14 @@ export interface MESSAGE {
   is_context_edge?: boolean
 }
 
-export interface SearchResult {
-  title: string
-  url: string
-  snippet?: string
-  favicon?: string
-  content?: string
-  description?: string
-  icon?: string
-  rank?: number
-  searchId?: string
-}
+export type { SearchResult }
 
 export interface IThreadPresenter {
   // Basic conversation operations
   createConversation(
     title: string,
     settings: Partial<CONVERSATION_SETTINGS>,
-    tabId: number,
+    webContentsId: number,
     options?: { forceNewAndActivate?: boolean }
   ): Promise<string>
   deleteConversation(conversationId: string): Promise<void>
@@ -126,7 +117,11 @@ export interface IThreadPresenter {
     parentSelection: ParentSelection | string
     title: string
     settings?: Partial<CONVERSATION_SETTINGS>
+    webContentsId?: number
+    openInNewWindow?: boolean
+    /** @deprecated Use webContentsId instead. */
     tabId?: number
+    /** @deprecated Use openInNewWindow instead. */
     openInNewTab?: boolean
   }): Promise<string>
 
@@ -138,16 +133,28 @@ export interface IThreadPresenter {
   listChildConversationsByParent(parentConversationId: string): Promise<CONVERSATION[]>
   listChildConversationsByMessageIds(parentMessageIds: string[]): Promise<CONVERSATION[]>
   loadMoreThreads(): Promise<{ hasMore: boolean; total: number }>
-  setActiveConversation(conversationId: string, tabId: number): Promise<void>
+  setActiveConversation(conversationId: string, webContentsId: number): Promise<void>
+  openConversationInNewWindow(payload: {
+    conversationId: string
+    webContentsId?: number
+    messageId?: string
+    childConversationId?: string
+  }): Promise<number | null>
+  /** @deprecated Use openConversationInNewWindow instead. */
   openConversationInNewTab(payload: {
     conversationId: string
     tabId?: number
     messageId?: string
     childConversationId?: string
   }): Promise<number | null>
-  getActiveConversation(tabId: number): Promise<CONVERSATION | null>
-  getActiveConversationId(tabId: number): Promise<string | null>
-  clearActiveThread(tabId: number): Promise<void>
+  getActiveConversation(webContentsId: number): Promise<CONVERSATION | null>
+  getActiveConversationId(webContentsId: number): Promise<string | null>
+  getActiveConversationIdSync(webContentsId: number): string | null
+  clearActiveConversationBinding(webContentsId: number): Promise<void>
+  /** @deprecated Use clearActiveConversationBinding instead. */
+  clearActiveThread(webContentsId: number): Promise<void>
+  findWebContentsForConversation(conversationId: string): Promise<number | null>
+  /** @deprecated Use findWebContentsForConversation instead. */
   findTabForConversation(conversationId: string): Promise<number | null>
 
   getSearchResults(messageId: string, searchId?: string): Promise<SearchResult[]>

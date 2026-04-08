@@ -39,11 +39,13 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { usePresenter } from '@/composables/usePresenter'
+import { useAgentStore } from '@/stores/ui/agent'
 import { Button } from '@shadcn/components/ui/button'
 import { Icon } from '@iconify/vue'
 
-const { t } = useI18n()
-const agentPresenter = usePresenter('agentPresenter')
+const { t, locale } = useI18n()
+const agentSessionPresenter = usePresenter('agentSessionPresenter')
+const agentStore = useAgentStore()
 
 // 状态
 const isOpen = ref(false)
@@ -125,7 +127,11 @@ const handleTranslateRequest = async (event: Event) => {
   translatedText.value = ''
 
   try {
-    const result = await agentPresenter.translateText(newText, window.api.getWebContentsId())
+    const result = await agentSessionPresenter.translateText(
+      newText,
+      locale.value,
+      agentStore.selectedAgentId ?? 'deepchat'
+    )
     translatedText.value = result
   } catch (error) {
     translatedText.value = t('contextMenu.translate.error')

@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
 // Mock electron-store with in-memory storage to persist user configs across helper instances
-const mockStores = new Map<string, Record<string, any>>()
+const state = vi.hoisted(() => ({
+  mockStores: new Map<string, Record<string, any>>(),
+  mockDb: null as any
+}))
 vi.mock('electron-store', () => {
   return {
     default: class MockElectronStore {
@@ -9,8 +12,8 @@ vi.mock('electron-store', () => {
       private data: Record<string, any>
       constructor(options: { name: string }) {
         this.storePath = options.name
-        if (!mockStores.has(this.storePath)) mockStores.set(this.storePath, {})
-        this.data = mockStores.get(this.storePath)!
+        if (!state.mockStores.has(this.storePath)) state.mockStores.set(this.storePath, {})
+        this.data = state.mockStores.get(this.storePath)!
       }
       get(key: string) {
         return this.data[key]
@@ -38,24 +41,24 @@ vi.mock('electron-store', () => {
 })
 
 // Mock providerDbLoader with a mutable in-memory aggregate
-let mockDb: any = null
 vi.mock('../../../src/main/presenter/configPresenter/providerDbLoader', () => {
   return {
     providerDbLoader: {
-      getDb: () => mockDb,
+      getDb: () => state.mockDb,
       initialize: async () => {}
     }
   }
 })
 
 import { ModelConfigHelper } from '../../../src/main/presenter/configPresenter/modelConfig'
+import { modelCapabilities } from '../../../src/main/presenter/configPresenter/modelCapabilities'
 import { ModelType } from '../../../src/shared/model'
 
 describe('Provider DB strict matching + user overrides', () => {
   beforeEach(() => {
     // Reset stores and mock DB before each test
-    mockStores.clear()
-    mockDb = {
+    state.mockStores.clear()
+    state.mockDb = {
       providers: {
         'test-provider': {
           id: 'test-provider',
@@ -80,12 +83,43 @@ describe('Provider DB strict matching + user overrides', () => {
               modalities: { input: ['text'] }
             },
             {
-              id: 'no-limit' // both missing -> fallback 8192/4096
+              id: 'no-limit' // both missing -> fallback 16000/4096
+            },
+            {
+              id: 'tool-call-disabled',
+              tool_call: false
+            },
+            {
+              id: 'claude-portrait',
+              reasoning: {
+                supported: true,
+                default: true
+              },
+              extra_capabilities: {
+                reasoning: {
+                  supported: true,
+                  default_enabled: false,
+                  mode: 'budget',
+                  budget: { min: 1024, default: 2048 }
+                }
+              }
+            },
+            {
+              id: 'gemini-budget',
+              extra_capabilities: {
+                reasoning: {
+                  supported: true,
+                  default_enabled: true,
+                  mode: 'budget',
+                  budget: { min: 0, max: 24576, default: -1, auto: -1, off: 0, unit: 'tokens' }
+                }
+              }
             }
           ]
         }
       }
     }
+    ;(modelCapabilities as any).rebuildIndexFromDb()
   })
 
   it('returns provider DB config on strict provider+model match', () => {
@@ -116,18 +150,28 @@ describe('Provider DB strict matching + user overrides', () => {
     expect(cfg1.searchStrategy).toBe('turbo')
 
     const cfg2 = helper.getModelConfig('no-limit', 'test-provider')
-    expect(cfg2.contextLength).toBe(8192)
+    expect(cfg2.contextLength).toBe(16000)
     expect(cfg2.maxTokens).toBe(4096)
+    expect(cfg2.functionCall).toBe(true)
     expect(cfg2.enableSearch).toBe(false)
     expect(cfg2.forcedSearch).toBe(false)
     expect(cfg2.searchStrategy).toBe('turbo')
   })
 
+  it('preserves explicit tool_call=false from provider DB', () => {
+    const helper = new ModelConfigHelper('1.0.0')
+    const cfg = helper.getModelConfig('tool-call-disabled', 'test-provider')
+    expect(cfg.contextLength).toBe(16000)
+    expect(cfg.maxTokens).toBe(4096)
+    expect(cfg.functionCall).toBe(false)
+  })
+
   it('falls back to safe defaults when providerId is not provided', () => {
     const helper = new ModelConfigHelper('1.0.0')
     const cfg = helper.getModelConfig('test-model')
-    expect(cfg.contextLength).toBe(8192)
+    expect(cfg.contextLength).toBe(16000)
     expect(cfg.maxTokens).toBe(4096)
+    expect(cfg.functionCall).toBe(true)
     expect(cfg.temperature).toBe(0.6)
   })
 
@@ -163,5 +207,58 @@ describe('Provider DB strict matching + user overrides', () => {
     // DB lookup lowercases internally
     expect(cfg.contextLength).toBe(10000)
     expect(cfg.maxTokens).toBe(2000)
+  })
+
+  it('prefers portrait defaults over legacy reasoning defaults', () => {
+    const helper = new ModelConfigHelper('1.0.0')
+
+    const cfg = helper.getModelConfig('claude-portrait', 'test-provider')
+
+    expect(cfg.reasoning).toBe(false)
+    expect(cfg.thinkingBudget).toBe(2048)
+    expect(cfg.reasoningEffort).toBeUndefined()
+  })
+
+  it('preserves provider portrait sentinel budgets', () => {
+    const helper = new ModelConfigHelper('1.0.0')
+
+    const cfg = helper.getModelConfig('gemini-budget', 'test-provider')
+
+    expect(cfg.reasoning).toBe(true)
+    expect(cfg.thinkingBudget).toBe(-1)
+  })
+
+  it('recomputes reasoning-related fields for provider cached configs', () => {
+    const helper = new ModelConfigHelper('1.0.0')
+
+    helper.setModelConfig(
+      'claude-portrait',
+      'test-provider',
+      {
+        maxTokens: 8192,
+        contextLength: 65536,
+        temperature: 0.3,
+        vision: true,
+        functionCall: true,
+        reasoning: true,
+        type: ModelType.Chat,
+        thinkingBudget: 9999,
+        reasoningEffort: 'high',
+        verbosity: 'high'
+      },
+      { source: 'provider' }
+    )
+
+    const cfg = helper.getModelConfig('claude-portrait', 'test-provider')
+
+    expect(cfg.contextLength).toBe(65536)
+    expect(cfg.maxTokens).toBe(8192)
+    expect(cfg.vision).toBe(true)
+    expect(cfg.functionCall).toBe(true)
+    expect(cfg.reasoning).toBe(false)
+    expect(cfg.thinkingBudget).toBe(2048)
+    expect(cfg.reasoningEffort).toBeUndefined()
+    expect(cfg.verbosity).toBeUndefined()
+    expect(cfg.isUserDefined).toBe(false)
   })
 })

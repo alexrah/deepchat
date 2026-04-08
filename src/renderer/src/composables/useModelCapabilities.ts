@@ -76,7 +76,7 @@ export function useModelCapabilities(options: UseModelCapabilitiesOptions) {
       capabilitySupportsReasoning.value = typeof sr === 'boolean' ? sr : null
       capabilityBudgetRange.value = br || {}
       capabilitySupportsSearch.value = typeof ss === 'boolean' ? ss : null
-      capabilitySearchDefaults.value = sd || null
+      capabilitySearchDefaults.value = sd || {}
     } catch (error) {
       resetCapabilities()
       console.error(error)

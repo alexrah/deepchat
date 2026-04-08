@@ -3,6 +3,8 @@
     <NodeRenderer
       :content="debouncedContent"
       :isDark="themeStore.isDark"
+      :codeBlockDarkTheme="codeBlockDarkTheme"
+      :codeBlockLightTheme="codeBlockLightTheme"
       :codeBlockMonacoOptions="codeBlockMonacoOption"
       @copy="$emit('copy', $event)"
     />
@@ -28,18 +30,25 @@ import { useUiSettingsStore } from '@/stores/uiSettingsStore'
 const props = defineProps<{
   content: string
   debug?: boolean
+  messageId?: string
+  threadId?: string
 }>()
 const themeStore = useThemeStore()
 const uiSettingsStore = useUiSettingsStore()
 // 组件映射表
 const artifactStore = useArtifactStore()
 // 生成唯一的 message ID 和 thread ID，用于 MarkdownRenderer
-const messageId = `artifact-msg-${nanoid()}`
-const threadId = `artifact-thread-${nanoid()}`
+const fallbackMessageId = `artifact-msg-${nanoid()}`
+const fallbackThreadId = `artifact-thread-${nanoid()}`
 const referenceStore = useReferenceStore()
-const sessionPresenter = usePresenter('sessionPresenter')
+const agentSessionPresenter = usePresenter('agentSessionPresenter')
 const referenceNode = ref<HTMLElement | null>(null)
 const debouncedContent = ref(props.content)
+const effectiveMessageId = computed(() => props.messageId ?? fallbackMessageId)
+const effectiveThreadId = computed(() => props.threadId ?? fallbackThreadId)
+const codeBlockThemes = ['vitesse-dark', 'vitesse-light'] as const
+const codeBlockDarkTheme = codeBlockThemes[0]
+const codeBlockLightTheme = codeBlockThemes[1]
 const codeBlockMonacoOption = computed(() => ({
   fontFamily: uiSettingsStore.formattedCodeFontFamily
 }))
@@ -63,10 +72,11 @@ setCustomComponents({
   reference: (_props) =>
     h(ReferenceNode, {
       ..._props,
-      messageId,
-      threadId,
+      messageId: effectiveMessageId.value,
+      threadId: effectiveThreadId.value,
       onClick() {
-        sessionPresenter.getSearchResults(_props.messageId ?? '').then((results) => {
+        // TODO: remove this temporary fallback after search result loading is fully unified.
+        agentSessionPresenter.getSearchResults(effectiveMessageId.value).then((results) => {
           const index = parseInt(_props.node.id)
           if (index < results.length) {
             window.open(results[index - 1].url, '_blank', 'noopener,noreferrer')
@@ -76,7 +86,7 @@ setCustomComponents({
       onMouseEnter() {
         console.log('Mouse entered')
         referenceStore.hideReference()
-        sessionPresenter.getSearchResults(_props.messageId ?? '').then((results) => {
+        agentSessionPresenter.getSearchResults(effectiveMessageId.value).then((results) => {
           const index = parseInt(_props.node.id)
           if (index - 1 < results.length && referenceNode.value) {
             referenceStore.showReference(
@@ -109,6 +119,11 @@ setCustomComponents({
     }
     return h(CodeBlockNode, {
       ..._props,
+      isDark: themeStore.isDark,
+      darkTheme: codeBlockDarkTheme,
+      lightTheme: codeBlockLightTheme,
+      themes: [...codeBlockThemes],
+      monacoOptions: codeBlockMonacoOption.value,
       onPreviewCode(v) {
         artifactStore.showArtifact(
           {
@@ -119,8 +134,8 @@ setCustomComponents({
             content: v.node.code,
             status: 'loaded'
           },
-          messageId,
-          threadId,
+          effectiveMessageId.value,
+          effectiveThreadId.value,
           { force: true }
         )
       }

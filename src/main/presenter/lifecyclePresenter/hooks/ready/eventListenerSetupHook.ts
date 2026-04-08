@@ -7,7 +7,7 @@ import { app } from 'electron'
 import { optimizer } from '@electron-toolkit/utils'
 import { LifecycleHook, LifecycleContext } from '@shared/presenter'
 import { eventBus } from '@/eventbus'
-import { WINDOW_EVENTS, TRAY_EVENTS, FLOATING_BUTTON_EVENTS } from '@/events'
+import { WINDOW_EVENTS, TRAY_EVENTS, FLOATING_BUTTON_EVENTS, SETTINGS_EVENTS } from '@/events'
 import { handleShowHiddenWindow } from '@/utils'
 import { presenter } from '@/presenter'
 import { LifecyclePhase } from '@shared/lifecycle'
@@ -36,10 +36,8 @@ export const eventListenerSetupHook: LifecycleHook = {
       // Also handle showing hidden windows
       const allWindows = presenter.windowPresenter.getAllWindows()
       if (allWindows.length === 0) {
-        presenter.windowPresenter.createShellWindow({
-          initialTab: {
-            url: 'local://chat'
-          }
+        presenter.windowPresenter.createAppWindow({
+          initialRoute: 'chat'
         })
       } else {
         // Try to show the most recently focused window, otherwise show the first window
@@ -51,9 +49,8 @@ export const eventListenerSetupHook: LifecycleHook = {
           console.warn(
             'eventListenerSetupHook: App activated but target window is destroyed, creating new window.'
           )
-          presenter.windowPresenter.createShellWindow({
-            // If target window is destroyed, create new window
-            initialTab: { url: 'local://chat' }
+          presenter.windowPresenter.createAppWindow({
+            initialRoute: 'chat'
           })
         }
       }
@@ -69,16 +66,35 @@ export const eventListenerSetupHook: LifecycleHook = {
     })
 
     // Tray check for updates
-    eventBus.on(TRAY_EVENTS.CHECK_FOR_UPDATES, () => {
-      const allWindows = presenter.windowPresenter.getAllWindows()
+    eventBus.on(TRAY_EVENTS.CHECK_FOR_UPDATES, async () => {
+      try {
+        const settingsWindowId = await presenter.windowPresenter.createSettingsWindow()
+        if (settingsWindowId == null) {
+          console.warn('eventListenerSetupHook: Failed to open settings window for update check.')
+          return
+        }
 
-      // Find target window (focused window or first window)
-      const targetWindow = presenter.windowPresenter.getFocusedWindow() || allWindows![0]
-      presenter.windowPresenter.show(targetWindow.id)
-      targetWindow.focus() // Ensure window is on top
+        const navigateToAbout = () => {
+          presenter.windowPresenter.sendToWindow(settingsWindowId, SETTINGS_EVENTS.NAVIGATE, {
+            routeName: 'settings-about'
+          })
+        }
 
-      // Trigger update
-      presenter.upgradePresenter.checkUpdate()
+        const triggerUpdateCheck = () => {
+          presenter.windowPresenter.sendToWindow(
+            settingsWindowId,
+            SETTINGS_EVENTS.CHECK_FOR_UPDATES
+          )
+        }
+
+        navigateToAbout()
+        triggerUpdateCheck()
+      } catch (error) {
+        console.error(
+          'eventListenerSetupHook: Failed to route tray update check to settings window:',
+          error
+        )
+      }
     })
 
     // Listen for show/hide window events (triggered from tray or shortcut or floating window)

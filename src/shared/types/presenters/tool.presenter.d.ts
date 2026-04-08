@@ -3,7 +3,14 @@
  * Types for the unified tool routing presenter
  */
 
-import type { MCPToolDefinition, MCPToolCall, MCPToolResponse } from './legacy.presenters'
+import type { MCPToolDefinition, MCPToolCall, MCPToolResponse } from '../core/mcp'
+
+export interface AgentToolProgressUpdate {
+  kind: 'subagent_orchestrator'
+  toolCallId: string
+  responseMarkdown: string
+  progressJson: string
+}
 
 /**
  * Tool Presenter interface
@@ -16,7 +23,8 @@ export interface IToolPresenter {
    */
   getAllToolDefinitions(context: {
     enabledMcpTools?: string[]
-    chatMode?: 'chat' | 'agent' | 'acp agent'
+    disabledAgentTools?: string[]
+    chatMode?: 'agent' | 'acp agent'
     supportsVision?: boolean
     agentWorkspacePath?: string | null
     conversationId?: string
@@ -26,10 +34,48 @@ export interface IToolPresenter {
    * Call a tool, routing to the appropriate source
    * @param request Tool call request
    */
-  callTool(request: MCPToolCall): Promise<{ content: unknown; rawData: MCPToolResponse }>
+  callTool(
+    request: MCPToolCall,
+    options?: {
+      onProgress?: (update: AgentToolProgressUpdate) => void
+      signal?: AbortSignal
+    }
+  ): Promise<{ content: unknown; rawData: MCPToolResponse }>
+
+  /**
+   * Pre-check tool permission without executing the tool.
+   */
+  preCheckToolPermission?(request: MCPToolCall): Promise<{
+    needsPermission: true
+    toolName: string
+    serverName: string
+    permissionType: 'read' | 'write' | 'all' | 'command'
+    description: string
+    paths?: string[]
+    command?: string
+    commandSignature?: string
+    commandInfo?: {
+      command: string
+      riskLevel: 'low' | 'medium' | 'high' | 'critical'
+      suggestion: string
+      signature?: string
+      baseCommand?: string
+    }
+    providerId?: string
+    requestId?: string
+    sessionId?: string
+    agentId?: string
+    agentName?: string
+    conversationId?: string
+    rememberable?: boolean
+    [key: string]: unknown
+  } | null>
 
   /**
    * Build system prompt section for tool-related behavior.
    */
-  buildToolSystemPrompt(context: { conversationId?: string }): string
+  buildToolSystemPrompt(context: {
+    conversationId?: string
+    toolDefinitions?: MCPToolDefinition[]
+  }): string
 }

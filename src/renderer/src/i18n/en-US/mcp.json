@@ -67,7 +67,7 @@
     "title": "Edit Server"
   },
   "enableToAccess": "Please enable MCP to access configuration options.",
-  "enabledDescription": "Enable or disable MCP functionality and tools.",
+  "enabledDescription": "When enabled, all enabled services start automatically.",
   "enabledTitle": "Enable MCP",
   "isDefault": "Default server",
   "noServersFound": "Server not found",
@@ -198,17 +198,9 @@
       "desc": "Allow DeepChat to interact with the local file system.",
       "name": "File System"
     },
-    "imageServer": {
-      "desc": "Enable any model in DeepChat to understand and generate images.",
-      "name": "Image Service"
-    },
     "braveSearch": {
       "desc": "Brave Search API https://brave.com/search/api/",
       "name": "Brave Search"
-    },
-    "powerpack": {
-      "desc": "Provide models with time queries, web browsing, and secure code execution.",
-      "name": "Power Pack"
     },
     "difyKnowledge": {
       "desc": "Dify Knowledge Base Search Service, which can retrieve content in Dify Knowledge Base",
@@ -241,10 +233,6 @@
     "builtinKnowledge": {
       "desc": "DeepChat built-in knowledge base search for DeepChat docs and guides.",
       "name": "Built-in knowledge base search"
-    },
-    "deepchat-inmemory/meeting-server": {
-      "name": "Multi-Agent Meetings",
-      "desc": "DeepChat built-in meetings to host multi-agent discussions."
     },
     "deepchat/apple-server": {
       "desc": "Let models operate macOS apps like Calendar, Contacts, Mail, Maps, Notes, and Reminders.",

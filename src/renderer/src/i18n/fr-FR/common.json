@@ -18,6 +18,7 @@
   "cancel": "Annuler",
   "confirm": "Confirmer",
   "close": "Fermer",
+  "open": "Ouvrir",
   "next": "Suivant",
   "back": "Retour",
   "error": {
@@ -42,7 +43,8 @@
     "error502": "Erreur de passerelle, le service demandé peut ne pas être stable à l'heure actuelle, vous pouvez réessayer plus tard",
     "error503": "Le service n'est pas disponible, le service demandé peut être actuellement instable, vous pouvez l'essayer plus tard",
     "error504": "La demande a expiré, le service demandé peut être actuellement instable ou le lien réseau est défectueux. Veuillez vérifier le proxy et d'autres configurations réseau avant d'essayer.",
-    "operationFailed": "L'opération a échoué"
+    "operationFailed": "L'opération a échoué",
+    "invalidQuestionRequest": "Requête de question invalide"
   },
   "resetDataConfirmTitle": "Réinitialiser toutes les données ?",
   "resetDataConfirmDescription": "Cela réinitialisera toutes vos données aux paramètres par défaut. Cette action ne peut pas être annulée.",
@@ -77,7 +79,6 @@
   "save": "Enregistrer",
   "clear": "Effacer",
   "saved": "Sauvé",
-  "newTab": "Nouvel onglet",
   "unknownError": "Erreur inconnue",
   "testing": "En cours de test",
   "saving": "En cours d'enregistrement",
@@ -91,9 +92,25 @@
     "back": "Précédent",
     "forward": "Suivant",
     "reload": "Actualiser",
+    "addressLabel": "Barre d’adresse",
     "addressPlaceholder": "Saisir une URL",
     "enterUrlDescription": "Entrez l'URL dans la barre d'adresse ci-dessus pour accéder au site Web",
     "enterUrlToStart": "Entrez l'URL pour commencer la visite",
     "name": "Votre navigateur"
+  },
+  "size": {
+    "bytes": "{count} octets"
+  },
+  "time": {
+    "today": "Aujourd'hui",
+    "yesterday": "Hier",
+    "lastWeek": "La semaine dernière",
+    "older": "Plus anciennes"
+  },
+  "project": {
+    "select": "Sélectionner un projet",
+    "none": "Aucun projet",
+    "recent": "Projets récents",
+    "openFolder": "Ouvrir un dossier..."
   }
 }

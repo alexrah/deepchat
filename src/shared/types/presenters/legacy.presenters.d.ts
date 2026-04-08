@@ -4,23 +4,31 @@ import { MessageFile } from './chat'
 import { ShowResponse } from 'ollama'
 import { ShortcutKeySetting } from '@/presenter/configPresenter/shortcutKeySettings'
 import { ApiEndpointType, ModelType } from '@shared/model'
+import type {
+  HookEventName,
+  HookTestResult,
+  HooksNotificationsSettings
+} from '../../hooksNotifications'
 import type { NowledgeMemThread, NowledgeMemExportSummary } from '../nowledgeMem'
+import type { AcpConfigState } from './llmprovider.presenter'
 import { ProviderChange, ProviderBatchUpdate } from './provider-operations'
 import type { AgentSessionLifecycleStatus } from './agent-provider'
-import type { IAgentPresenter } from './agent.presenter'
 import type { ISessionPresenter } from './session.presenter'
-import type { ISearchPresenter } from './search.presenter'
 import type { IConversationExporter } from './exporter.presenter'
 import type { IWorkspacePresenter } from './workspace'
 import type { IToolPresenter } from './tool.presenter'
 import type { ISkillPresenter } from '../skill'
 import type { ISkillSyncPresenter } from '../skillSync'
+import type { IAgentSessionPresenter } from './agent-session.presenter'
+import type { IProjectPresenter } from './project.presenter'
+import type { BrowserPageInfo, DownloadInfo, ScreenshotOptions, YoBrowserStatus } from '../browser'
 import type {
-  BrowserTabInfo,
-  BrowserContextSnapshot,
-  DownloadInfo,
-  ScreenshotOptions
-} from '../browser'
+  Agent,
+  AgentType,
+  CreateDeepChatAgentInput,
+  DeepChatAgentConfig,
+  UpdateDeepChatAgentInput
+} from '../agent-interface'
 
 export type SQLITE_MESSAGE = {
   id: string
@@ -156,15 +164,17 @@ export interface ModelConfig {
   // Whether this config is user-defined (true) or default config (false)
   isUserDefined?: boolean
   thinkingBudget?: number
-  enableSearch?: boolean
-  forcedSearch?: boolean
-  searchStrategy?: 'turbo' | 'max'
+  forceInterleavedThinkingCompat?: boolean
   // New parameters for GPT-5 series
   reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high'
   verbosity?: 'low' | 'medium' | 'high'
   maxCompletionTokens?: number // GPT-5 series uses this parameter to replace maxTokens
   conversationId?: string
   apiEndpoint?: ApiEndpointType
+  // Search-related parameters
+  enableSearch?: boolean
+  forcedSearch?: boolean
+  searchStrategy?: 'turbo' | 'balanced' | 'precise'
 }
 
 export interface IModelConfig {
@@ -185,49 +195,55 @@ export interface TabData {
   closable: boolean
   url: string
   icon?: string
-  browserTabId?: string
-}
-
-export interface BrowserContextSnapshot {
-  activeTabId: string | null
-  tabs: BrowserTabInfo[]
 }
 
 export interface IYoBrowserPresenter {
   initialize(): Promise<void>
-  ensureWindow(): Promise<number | null>
-  hasWindow(): Promise<boolean>
-  show(shouldFocus?: boolean): Promise<void>
-  hide(): Promise<void>
-  toggleVisibility(): Promise<boolean>
-  isVisible(): Promise<boolean>
-  listTabs(): Promise<BrowserTabInfo[]>
-  getActiveTab(): Promise<BrowserTabInfo | null>
-  createTab(url?: string): Promise<BrowserTabInfo | null>
-  navigateTab(tabId: string, url: string): Promise<void>
-  activateTab(tabId: string): Promise<void>
-  closeTab(tabId: string): Promise<void>
-  reuseTab(url: string): Promise<BrowserTabInfo | null>
-  goBack(tabId?: string): Promise<void>
-  goForward(tabId?: string): Promise<void>
-  reload(tabId?: string): Promise<void>
-  getBrowserContext(): Promise<BrowserContextSnapshot>
-  getNavigationState(tabId?: string): Promise<{
+  getBrowserStatus(sessionId: string): Promise<YoBrowserStatus>
+  loadUrl(sessionId: string, url: string, timeoutMs?: number): Promise<YoBrowserStatus>
+  attachSessionBrowser(sessionId: string, hostWindowId: number): Promise<boolean>
+  updateSessionBrowserBounds(
+    sessionId: string,
+    hostWindowId: number,
+    bounds: {
+      x: number
+      y: number
+      width: number
+      height: number
+    },
+    visible: boolean
+  ): Promise<void>
+  detachSessionBrowser(sessionId: string): Promise<void>
+  destroySessionBrowser(sessionId: string): Promise<void>
+  goBack(sessionId: string): Promise<void>
+  goForward(sessionId: string): Promise<void>
+  reload(sessionId: string): Promise<void>
+  getNavigationState(sessionId: string): Promise<{
     canGoBack: boolean
     canGoForward: boolean
   }>
-  getTabIdByViewId(viewId: number): Promise<string | null>
-  captureScreenshot(tabId: string, options?: ScreenshotOptions): Promise<string>
+  captureScreenshot(sessionId: string, options?: ScreenshotOptions): Promise<string>
+  getBrowserPage(sessionId: string): Promise<BrowserPageInfo | null>
   startDownload(url: string, savePath?: string): Promise<DownloadInfo>
   clearSandboxData(): Promise<void>
   shutdown(): Promise<void>
   readonly toolHandler: {
     getToolDefinitions(): any[]
-    callTool(toolName: string, args: Record<string, unknown>): Promise<string>
+    callTool(
+      toolName: string,
+      args: Record<string, unknown>,
+      conversationId?: string
+    ): Promise<string>
   }
 }
 
 export interface IWindowPresenter {
+  createAppWindow(options?: {
+    initialRoute?: string
+    x?: number
+    y?: number
+  }): Promise<number | null>
+  createBrowserWindow(options?: { x?: number; y?: number }): Promise<number | null>
   createShellWindow(options?: {
     activateTabId?: number
     initialTab?: {
@@ -245,15 +261,29 @@ export interface IWindowPresenter {
   minimize(windowId: number): void
   maximize(windowId: number): void
   close(windowId: number): void
-  createSettingsWindow(): Promise<number | null>
+  createSettingsWindow(
+    navigation?: import('@shared/settingsNavigation').SettingsNavigationPayload
+  ): Promise<number | null>
   closeSettingsWindow(): void
   getSettingsWindowId(): number | null
+  setPendingSettingsProviderInstall(
+    preview: import('@shared/providerDeeplink').ProviderInstallPreview
+  ): void
+  consumePendingSettingsProviderInstall():
+    | import('@shared/providerDeeplink').ProviderInstallPreview
+    | null
   hide(windowId: number): void
   show(windowId?: number, shouldFocus?: boolean): void
   isMaximized(windowId: number): boolean
   isMainWindowFocused(windowId: number): boolean
   sendToAllWindows(channel: string, ...args: unknown[]): void
   sendToWindow(windowId: number, channel: string, ...args: unknown[]): boolean
+  sendToDefaultWindow(
+    channel: string,
+    switchToTarget?: boolean,
+    ...args: unknown[]
+  ): Promise<boolean>
+  openOrFocusSettingsWindow(): Promise<void>
   sendToDefaultTab(channel: string, switchToTarget?: boolean, ...args: unknown[]): Promise<boolean>
   openOrFocusSettingsTab(windowId: number): Promise<void>
   closeWindow(windowId: number, forceClose?: boolean): Promise<void>
@@ -263,6 +293,7 @@ export interface IWindowPresenter {
   isFloatingChatWindowVisible(): boolean
   getFloatingChatWindow(): FloatingChatWindow | null
   getFocusedWindow(): BrowserWindow | undefined
+  sendToWebContents(webContentsId: number, channel: string, ...args: unknown[]): Promise<boolean>
   sendToActiveTab(windowId: number, channel: string, ...args: unknown[]): Promise<boolean>
   getAllWindows(): BrowserWindow[]
   toggleFloatingChatWindow(floatingButtonPosition?: {
@@ -313,7 +344,6 @@ export interface ITabPresenter {
   registerFloatingWindow(webContentsId: number, webContents: Electron.WebContents): void
   unregisterFloatingWindow(webContentsId: number): void
   resetTabToBlank(tabId: number): Promise<void>
-  setTabBrowserId(tabId: number, browserTabId: string): void
   destroy(): Promise<void>
 }
 
@@ -332,6 +362,15 @@ export interface IShortcutPresenter {
 export interface ISQLitePresenter {
   close(): void
   reopen(): void
+  clearNewAgentData(): Promise<void>
+  importLegacyChatDb(
+    sourceDbPath: string,
+    mode: 'increment' | 'overwrite'
+  ): Promise<{
+    importedSessions: number
+    importedMessages: number
+    importedSearchResults: number
+  }>
   createConversation(title: string, settings?: Partial<CONVERSATION_SETTINGS>): Promise<string>
   deleteConversation(conversationId: string): Promise<void>
   renameConversation(conversationId: string, title: string): Promise<CONVERSATION>
@@ -360,6 +399,7 @@ export interface ISQLitePresenter {
   queryMessageIds(conversationId: string): Promise<string[]>
   deleteAllMessages(): Promise<void>
   runTransaction(operations: () => void): Promise<void>
+  getDatabase(): any
 
   // Added message management methods
   getMessage(messageId: string): Promise<SQLITE_MESSAGE | null>
@@ -385,6 +425,7 @@ export interface ISQLitePresenter {
   ): Promise<void>
   getMessageAttachments(messageId: string, type: string): Promise<{ content: string }[]>
   getLastUserMessage(conversationId: string): Promise<SQLITE_MESSAGE | null>
+  getLastAssistantMessage(conversationId: string): Promise<SQLITE_MESSAGE | null>
   getMainMessageByParentId(conversationId: string, parentId: string): Promise<SQLITE_MESSAGE | null>
   deleteAllMessagesInConversation(conversationId: string): Promise<void>
   getAcpSession(conversationId: string, agentId: string): Promise<AcpSessionEntity | null>
@@ -406,18 +447,13 @@ export interface ISQLitePresenter {
   ): Promise<void>
   deleteAcpSessions(conversationId: string): Promise<void>
   deleteAcpSession(conversationId: string, agentId: string): Promise<void>
+  migrateAcpAgentReferences(aliasMap: Record<string, string>): Promise<void>
 }
 
 export interface IOAuthPresenter {
   startOAuthLogin(providerId: string, config: OAuthConfig): Promise<boolean>
   startGitHubCopilotLogin(providerId: string): Promise<boolean>
   startGitHubCopilotDeviceFlowLogin(providerId: string): Promise<boolean>
-  startAnthropicOAuthFlow(): Promise<string>
-  completeAnthropicOAuthWithCode(code: string): Promise<boolean>
-  cancelAnthropicOAuthFlow(): Promise<void>
-  hasAnthropicCredentials(): Promise<boolean>
-  getAnthropicAccessToken(): Promise<string | null>
-  clearAnthropicCredentials(): Promise<void>
 }
 
 export interface OAuthConfig {
@@ -434,10 +470,7 @@ export interface IPresenter {
   sqlitePresenter: ISQLitePresenter
   llmproviderPresenter: ILlmProviderPresenter
   configPresenter: IConfigPresenter
-  sessionPresenter: ISessionPresenter
-  searchPresenter: ISearchPresenter
   exporter: IConversationExporter
-  agentPresenter: IAgentPresenter & ISessionPresenter
   devicePresenter: IDevicePresenter
   upgradePresenter: IUpgradePresenter
   shortcutPresenter: IShortcutPresenter
@@ -455,14 +488,25 @@ export interface IPresenter {
   toolPresenter: IToolPresenter
   skillPresenter: ISkillPresenter
   skillSyncPresenter: ISkillSyncPresenter
+  agentSessionPresenter: IAgentSessionPresenter
+  projectPresenter: IProjectPresenter
   init(): void
-  destroy(): void
+  destroy(): Promise<void>
 }
 
 export interface INotificationPresenter {
   showNotification(options: { id: string; title: string; body: string; silent?: boolean }): void
   clearNotification(id: string): void
   clearAllNotifications(): void
+}
+
+import type { ReasoningPortrait } from '../model-db'
+
+export type ProviderDbRefreshResult = {
+  status: 'updated' | 'not-modified' | 'skipped' | 'error'
+  lastUpdated: number | null
+  providersCount: number
+  message?: string
 }
 
 export interface IConfigPresenter {
@@ -475,6 +519,7 @@ export interface IConfigPresenter {
   getProviderModels(providerId: string): MODEL_META[]
   getDbProviderModels(providerId: string): RENDERER_MODEL_META[]
   supportsReasoningCapability?(providerId: string, modelId: string): boolean
+  getReasoningPortrait?(providerId: string, modelId: string): ReasoningPortrait | null
   getThinkingBudgetRange?(
     providerId: string,
     modelId: string
@@ -495,9 +540,6 @@ export interface IConfigPresenter {
   getEnabledProviders(): LLM_PROVIDER[]
   getModelDefaultConfig(modelId: string, providerId?: string): ModelConfig
   getAllEnabledModels(): Promise<{ providerId: string; models: RENDERER_MODEL_META[] }[]>
-  // Sound effect settings
-  getSoundEnabled(): boolean
-  setSoundEnabled(enabled: boolean): void
   // Chain of Thought copy settings
   getCopyWithCotEnabled(): boolean
   setCopyWithCotEnabled(enabled: boolean): void
@@ -546,6 +588,15 @@ export interface IConfigPresenter {
   // Search preview settings
   getSearchPreviewEnabled(): Promise<boolean>
   setSearchPreviewEnabled(enabled: boolean): void
+  // Auto scroll settings
+  getAutoScrollEnabled(): boolean
+  setAutoScrollEnabled(enabled: boolean): void
+  getAutoCompactionEnabled(): boolean
+  setAutoCompactionEnabled(enabled: boolean): void
+  getAutoCompactionTriggerThreshold(): number
+  setAutoCompactionTriggerThreshold(threshold: number): void
+  getAutoCompactionRetainRecentPairs(): number
+  setAutoCompactionRetainRecentPairs(count: number): void
   // Screen sharing protection settings
   getContentProtectionEnabled(): boolean
   setContentProtectionEnabled(enabled: boolean): void
@@ -556,6 +607,14 @@ export interface IConfigPresenter {
   setSyncFolderPath(folderPath: string): void
   getLastSyncTime(): number
   setLastSyncTime(time: number): void
+  // Hooks & notifications settings
+  getHooksNotificationsConfig(): HooksNotificationsSettings
+  setHooksNotificationsConfig(config: HooksNotificationsSettings): HooksNotificationsSettings
+  getConfirmoHookStatus(): { available: boolean; path: string }
+  testTelegramNotification(): Promise<HookTestResult>
+  testDiscordNotification(): Promise<HookTestResult>
+  testConfirmoNotification(): Promise<HookTestResult>
+  testHookCommand(eventName: HookEventName): Promise<HookTestResult>
   // Skills settings
   getSkillsEnabled(): boolean
   setSkillsEnabled(enabled: boolean): void
@@ -565,10 +624,8 @@ export interface IConfigPresenter {
   // MCP configuration related methods
   getMcpServers(): Promise<Record<string, MCPServerConfig>>
   setMcpServers(servers: Record<string, MCPServerConfig>): Promise<void>
-  getMcpDefaultServers(): Promise<string[]>
-  addMcpDefaultServer(serverName: string): Promise<void>
-  removeMcpDefaultServer(serverName: string): Promise<void>
-  toggleMcpDefaultServer(serverName: string): Promise<void>
+  getEnabledMcpServers(): Promise<string[]>
+  setMcpServerEnabled(serverName: string, enabled: boolean): Promise<void>
   getMcpEnabled(): Promise<boolean>
   setMcpEnabled(enabled: boolean): Promise<void>
   addMcpServer(serverName: string, config: MCPServerConfig): Promise<boolean>
@@ -577,6 +634,37 @@ export interface IConfigPresenter {
   // ACP configuration methods
   getAcpEnabled(): Promise<boolean>
   setAcpEnabled(enabled: boolean): Promise<void>
+  listAcpRegistryAgents(): Promise<AcpRegistryAgent[]>
+  refreshAcpRegistry(force?: boolean): Promise<AcpRegistryAgent[]>
+  getAcpRegistryIconMarkup(agentId: string, iconUrl?: string): Promise<string | null>
+  getAcpAgentState(agentId: string): Promise<AcpAgentState | null>
+  setAcpAgentEnabled(agentId: string, enabled: boolean): Promise<void>
+  setAcpAgentEnvOverride(agentId: string, env: Record<string, string>): Promise<void>
+  ensureAcpAgentInstalled(agentId: string): Promise<AcpAgentInstallState>
+  repairAcpAgent(agentId: string): Promise<AcpAgentInstallState>
+  uninstallAcpRegistryAgent(agentId: string): Promise<void>
+  getAcpAgentInstallStatus(agentId: string): Promise<AcpAgentInstallState | null>
+  listManualAcpAgents(): Promise<AcpManualAgent[]>
+  addManualAcpAgent(
+    agent: Omit<AcpManualAgent, 'id' | 'source'> & { id?: string }
+  ): Promise<AcpManualAgent>
+  updateManualAcpAgent(
+    agentId: string,
+    updates: Partial<Omit<AcpManualAgent, 'id' | 'source'>>
+  ): Promise<AcpManualAgent | null>
+  removeManualAcpAgent(agentId: string): Promise<boolean>
+  resolveAcpLaunchSpec(agentId: string, workdir?: string): Promise<AcpResolvedLaunchSpec>
+  getAcpSharedMcpSelections(): Promise<string[]>
+  setAcpSharedMcpSelections(mcpIds: string[]): Promise<void>
+  listAgents(): Promise<Agent[]>
+  getAgent(agentId: string): Promise<Agent | null>
+  getAgentType(agentId: string): Promise<AgentType | null>
+  getDeepChatAgentConfig(agentId: string): Promise<DeepChatAgentConfig | null>
+  resolveDeepChatAgentConfig(agentId: string): Promise<DeepChatAgentConfig>
+  agentSupportsCapability?(agentId: string, capability: 'vision'): Promise<boolean>
+  createDeepChatAgent(input: CreateDeepChatAgentInput): Promise<Agent>
+  updateDeepChatAgent(agentId: string, updates: UpdateDeepChatAgentInput): Promise<Agent | null>
+  deleteDeepChatAgent(agentId: string): Promise<boolean>
   // Nowledge-mem configuration methods
   getNowledgeMemConfig(): Promise<{
     baseUrl: string
@@ -584,46 +672,13 @@ export interface IConfigPresenter {
     timeout: number
   } | null>
   setNowledgeMemConfig(config: { baseUrl: string; apiKey?: string; timeout: number }): Promise<void>
-  getAcpUseBuiltinRuntime(): Promise<boolean>
-  setAcpUseBuiltinRuntime(enabled: boolean): Promise<void>
-  setAcpAgents(agents: AcpAgentConfig[]): Promise<AcpAgentConfig[]>
   getAcpAgents(): Promise<AcpAgentConfig[]>
-  addAcpAgent(agent: Omit<AcpAgentConfig, 'id'> & { id?: string }): Promise<AcpAgentConfig>
-  updateAcpAgent(
-    agentId: string,
-    updates: Partial<Omit<AcpAgentConfig, 'id'>>
-  ): Promise<AcpAgentConfig | null>
-  removeAcpAgent(agentId: string): Promise<boolean>
-  getAcpBuiltinAgents(): Promise<AcpBuiltinAgent[]>
-  getAcpCustomAgents(): Promise<AcpCustomAgent[]>
-  addAcpBuiltinProfile(
-    agentId: AcpBuiltinAgentId,
-    profile: Omit<AcpAgentProfile, 'id'>,
-    options?: { activate?: boolean }
-  ): Promise<AcpAgentProfile>
-  updateAcpBuiltinProfile(
-    agentId: AcpBuiltinAgentId,
-    profileId: string,
-    updates: Partial<Omit<AcpAgentProfile, 'id'>>
-  ): Promise<AcpAgentProfile | null>
-  removeAcpBuiltinProfile(agentId: AcpBuiltinAgentId, profileId: string): Promise<boolean>
-  setAcpBuiltinActiveProfile(agentId: AcpBuiltinAgentId, profileId: string): Promise<void>
-  setAcpBuiltinEnabled(agentId: AcpBuiltinAgentId, enabled: boolean): Promise<void>
-  addCustomAcpAgent(
-    agent: Omit<AcpCustomAgent, 'id' | 'enabled'> & { id?: string; enabled?: boolean }
-  ): Promise<AcpCustomAgent>
-  updateCustomAcpAgent(
-    agentId: string,
-    updates: Partial<Omit<AcpCustomAgent, 'id'>>
-  ): Promise<AcpCustomAgent | null>
-  removeCustomAcpAgent(agentId: string): Promise<boolean>
-  setCustomAcpAgentEnabled(agentId: string, enabled: boolean): Promise<void>
-  initializeAcpAgent(agentId: string, isBuiltin: boolean): Promise<void>
   getAgentMcpSelections(agentId: string, isBuiltin?: boolean): Promise<string[]>
   setAgentMcpSelections(agentId: string, isBuiltin: boolean, mcpIds: string[]): Promise<void>
   addMcpToAgent(agentId: string, isBuiltin: boolean, mcpId: string): Promise<void>
   removeMcpFromAgent(agentId: string, isBuiltin: boolean, mcpId: string): Promise<void>
   getMcpConfHelper(): any // Used to get MCP configuration helper
+  isKnownModel?(providerId: string, modelId: string): boolean
   getModelConfig(modelId: string, providerId?: string): ModelConfig
   setModelConfig(
     modelId: string,
@@ -689,6 +744,13 @@ export interface IConfigPresenter {
   setAutoDetectNpmRegistry?(enabled: boolean): void
   clearNpmRegistryCache?(): void
   getProviderDb(): { providers: Record<string, unknown> } | null
+  refreshProviderDb(force?: boolean): Promise<ProviderDbRefreshResult>
+
+  // Default model settings
+  getDefaultModel(): { providerId: string; modelId: string } | undefined
+  setDefaultModel(model: { providerId: string; modelId: string } | undefined): void
+  getDefaultProjectPath(): string | null
+  setDefaultProjectPath(path: string | null): void
 
   // Atomic operation interfaces
   updateProviderAtomic(id: string, updates: Partial<LLM_PROVIDER>): boolean
@@ -708,7 +770,6 @@ export type RENDERER_MODEL_META = {
   vision?: boolean
   functionCall?: boolean
   reasoning?: boolean
-  enableSearch?: boolean
   type?: ModelType
   contextLength?: number
   maxTokens?: number
@@ -724,7 +785,6 @@ export type MODEL_META = {
   vision?: boolean
   functionCall?: boolean
   reasoning?: boolean
-  enableSearch?: boolean
   type?: ModelType
   contextLength?: number
   maxTokens?: number
@@ -743,7 +803,6 @@ export type LLM_PROVIDER = {
   enabledModels?: string[]
   disabledModels?: string[]
   custom?: boolean
-  authMode?: 'apikey' | 'oauth' // Authentication mode
   oauthToken?: string // OAuth token
   rateLimit?: {
     enabled: boolean
@@ -829,7 +888,15 @@ export interface AcpDebugRunResult {
   events: AcpDebugEventEntry[]
 }
 
-export type AcpBuiltinAgentId = 'kimi-cli' | 'claude-code-acp' | 'codex-acp'
+export type AcpLegacyBuiltinAgentId = 'kimi-cli' | 'claude-code-acp' | 'codex-acp' | 'dimcode-acp'
+
+export type AcpBuiltinAgentId = AcpLegacyBuiltinAgentId
+
+export type AcpAgentSource = 'registry' | 'manual'
+
+export type AcpRegistryDistributionType = 'binary' | 'npx' | 'uvx'
+
+export type AcpAgentInstallStatus = 'not_installed' | 'installing' | 'installed' | 'error'
 
 export interface AcpAgentProfile {
   id: string
@@ -840,7 +907,7 @@ export interface AcpAgentProfile {
 }
 
 export interface AcpBuiltinAgent {
-  id: AcpBuiltinAgentId
+  id: AcpLegacyBuiltinAgentId
   name: string
   enabled: boolean
   activeProfileId: string | null
@@ -879,6 +946,92 @@ export interface AcpAgentConfig {
   command: string
   args?: string[]
   env?: Record<string, string>
+  description?: string
+  icon?: string
+  source?: AcpAgentSource
+  installState?: AcpAgentInstallState | null
+}
+
+export interface AcpRegistryBinaryDistribution {
+  archive: string
+  cmd: string
+  args?: string[]
+  env?: Record<string, string>
+}
+
+export interface AcpRegistryPackageDistribution {
+  package: string
+  args?: string[]
+  env?: Record<string, string>
+}
+
+export interface AcpRegistryDistribution {
+  binary?: Record<string, AcpRegistryBinaryDistribution>
+  npx?: AcpRegistryPackageDistribution
+  uvx?: AcpRegistryPackageDistribution
+}
+
+export interface AcpAgentInstallState {
+  status: AcpAgentInstallStatus
+  distributionType?: AcpRegistryDistributionType | 'manual' | null
+  version?: string | null
+  installedAt?: number | null
+  lastCheckedAt?: number | null
+  installDir?: string | null
+  error?: string | null
+}
+
+export interface AcpAgentState {
+  agentId: string
+  enabled: boolean
+  envOverride?: Record<string, string>
+  updatedAt: number
+}
+
+export interface AcpAgentEnvOverride {
+  agentId: string
+  env: Record<string, string>
+}
+
+export interface AcpRegistryAgent {
+  id: string
+  name: string
+  version: string
+  description?: string
+  repository?: string
+  website?: string
+  authors?: string[]
+  license?: string
+  icon?: string
+  distribution: AcpRegistryDistribution
+  source: 'registry'
+  enabled: boolean
+  envOverride?: Record<string, string>
+  installState?: AcpAgentInstallState | null
+}
+
+export interface AcpManualAgent {
+  id: string
+  name: string
+  command: string
+  args?: string[]
+  env?: Record<string, string>
+  enabled: boolean
+  description?: string
+  icon?: string
+  source: 'manual'
+}
+
+export interface AcpResolvedLaunchSpec {
+  agentId: string
+  source: AcpAgentSource
+  distributionType: AcpRegistryDistributionType | 'manual'
+  version?: string
+  command: string
+  args: string[]
+  env: Record<string, string>
+  cwd?: string
+  installDir?: string | null
 }
 
 export interface AcpSessionEntity {
@@ -960,22 +1113,6 @@ export interface ILlmProviderPresenter {
     updates: Partial<MODEL_META>
   ): Promise<boolean>
   getCustomModels(providerId: string): Promise<MODEL_META[]>
-  startStreamCompletion(
-    providerId: string,
-    messages: ChatMessage[],
-    modelId: string,
-    eventId: string,
-    temperature?: number,
-    maxTokens?: number,
-    enabledMcpTools?: string[],
-    thinkingBudget?: number,
-    reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high',
-    verbosity?: 'low' | 'medium' | 'high',
-    enableSearch?: boolean,
-    forcedSearch?: boolean,
-    searchStrategy?: 'turbo' | 'max',
-    conversationId?: string
-  ): AsyncGenerator<LLMAgentEvent, void, unknown>
   generateCompletion(
     providerId: string,
     messages: { role: 'system' | 'user' | 'assistant'; content: string }[],
@@ -983,6 +1120,13 @@ export interface ILlmProviderPresenter {
     temperature?: number,
     maxTokens?: number
   ): Promise<string>
+  generateText(
+    providerId: string,
+    prompt: string,
+    modelId: string,
+    temperature?: number,
+    maxTokens?: number
+  ): Promise<{ content: string }>
   stopStream(eventId: string): Promise<void>
   check(providerId: string, modelId?: string): Promise<{ isOk: boolean; errorMsg: string | null }>
   getKeyStatus(providerId: string): Promise<KeyStatus | null>
@@ -1017,6 +1161,19 @@ export interface ILlmProviderPresenter {
       lastRequestTime: number
     }
   >
+  executeWithRateLimit(
+    providerId: string,
+    options?: {
+      signal?: AbortSignal
+      onQueued?: (snapshot: {
+        providerId: string
+        qpsLimit: number
+        currentQps: number
+        queueLength: number
+        estimatedWaitTime: number
+      }) => void
+    }
+  ): Promise<void>
   syncModelScopeMcpServers(
     providerId: string,
     syncOptions?: ModelScopeMcpSyncOptions
@@ -1027,14 +1184,15 @@ export interface ILlmProviderPresenter {
     messages: ChatMessage[],
     modelId: string,
     temperature?: number,
-    maxTokens?: number
+    maxTokens?: number,
+    options?: { signal?: AbortSignal }
   ): Promise<string>
   getAcpWorkdir(conversationId: string, agentId: string): Promise<AcpWorkdirInfo>
   setAcpWorkdir(conversationId: string, agentId: string, workdir: string | null): Promise<void>
-  warmupAcpProcess(agentId: string, workdir: string): Promise<void>
+  warmupAcpProcess(agentId: string, workdir?: string): Promise<void>
   getAcpProcessModes(
     agentId: string,
-    workdir: string
+    workdir?: string
   ): Promise<
     | {
         availableModes?: Array<{ id: string; name: string; description: string }>
@@ -1042,12 +1200,27 @@ export interface ILlmProviderPresenter {
       }
     | undefined
   >
+  getAcpProcessConfigOptions(agentId: string, workdir?: string): Promise<AcpConfigState | null>
   setAcpPreferredProcessMode(agentId: string, workdir: string, modeId: string): Promise<void>
   setAcpSessionMode(conversationId: string, modeId: string): Promise<void>
+  prepareAcpSession(conversationId: string, agentId: string, workdir: string): Promise<void>
   getAcpSessionModes(conversationId: string): Promise<{
     current: string
     available: Array<{ id: string; name: string; description: string }>
   } | null>
+  getAcpSessionConfigOptions(conversationId: string): Promise<AcpConfigState | null>
+  setAcpSessionConfigOption(
+    conversationId: string,
+    configId: string,
+    value: string | boolean
+  ): Promise<AcpConfigState | null>
+  getAcpSessionCommands(conversationId: string): Promise<
+    Array<{
+      name: string
+      description: string
+      input?: { hint: string } | null
+    }>
+  >
   resolveAgentPermission(requestId: string, granted: boolean): Promise<void>
   runAcpDebugAction(request: AcpDebugRequest): Promise<AcpDebugRunResult>
   getProviderInstance(providerId: string): unknown
@@ -1064,14 +1237,11 @@ export type CONVERSATION_SETTINGS = {
   artifacts: 0 | 1
   enabledMcpTools?: string[]
   thinkingBudget?: number
-  enableSearch?: boolean
-  forcedSearch?: boolean
-  searchStrategy?: 'turbo' | 'max'
   reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high'
   verbosity?: 'low' | 'medium' | 'high'
   selectedVariantsMap?: Record<string, string>
   acpWorkdirMap?: Record<string, string | null>
-  chatMode?: 'chat' | 'agent' | 'acp agent'
+  chatMode?: 'agent' | 'acp agent'
   agentWorkspacePath?: string | null
   activeSkills?: string[] // Activated skills for this conversation
 }
@@ -1156,7 +1326,6 @@ export interface IThreadPresenter {
   clearActiveThread(tabId: number): Promise<void>
   findTabForConversation(conversationId: string): Promise<number | null>
 
-  getSearchResults(messageId: string, searchId?: string): Promise<SearchResult[]>
   clearAllMessages(conversationId: string): Promise<void>
 
   // Message operations
@@ -1343,7 +1512,7 @@ export interface IUpgradePresenter {
       downloadUrl: string | undefined
     } | null
   }
-  goDownloadUpgrade(type: 'github' | 'netdisk'): Promise<void>
+  goDownloadUpgrade(type: 'github' | 'official'): Promise<void>
   startDownloadUpdate(): boolean
   restartToUpdate(): boolean
   restartApp(): void
@@ -1363,22 +1532,6 @@ export interface UpdateProgress {
   percent: number
   transferred: number
   total: number
-}
-
-export interface SearchResult {
-  title: string
-  url: string
-  rank: number
-  content?: string
-  icon?: string
-  favicon?: string
-  description?: string
-  searchId?: string
-}
-
-export interface ISearchPresenter {
-  init(): void
-  search(query: string, engine: 'google' | 'baidu'): Promise<SearchResult[]>
 }
 
 export type FileOperation = {
@@ -1455,6 +1608,7 @@ export interface MCPServerConfig {
   descriptions: string
   icons: string
   autoApprove: string[]
+  enabled: boolean
   disable?: boolean
   baseUrl?: string
   customHeaders?: Record<string, string>
@@ -1466,13 +1620,13 @@ export interface MCPServerConfig {
 
 export interface MCPConfig {
   mcpServers: Record<string, MCPServerConfig>
-  defaultServers: string[]
   mcpEnabled: boolean
   ready: boolean
 }
 
 export interface MCPToolDefinition {
   type: string
+  source?: 'mcp' | 'agent'
   function: {
     name: string
     description: string
@@ -1505,6 +1659,10 @@ export interface MCPToolCall {
    * Optional conversation context (used for ACP agent MCP access control).
    */
   conversationId?: string
+  /**
+   * Optional provider hint to skip ACP session resolution for non-ACP sessions.
+   */
+  providerId?: string
 }
 
 export interface MCPToolResponse {
@@ -1586,10 +1744,8 @@ export interface IMCPPresenter {
   isReady(): boolean
   getMcpServers(): Promise<Record<string, MCPServerConfig>>
   getMcpClients(): Promise<McpClient[]>
-  getMcpDefaultServers(): Promise<string[]>
-  addMcpDefaultServer(serverName: string): Promise<void>
-  removeMcpDefaultServer(serverName: string): Promise<void>
-  toggleMcpDefaultServer(serverName: string): Promise<void>
+  getEnabledMcpServers(): Promise<string[]>
+  setMcpServerEnabled(serverName: string, enabled: boolean): Promise<void>
   addMcpServer(serverName: string, config: MCPServerConfig): Promise<boolean>
   removeMcpServer(serverName: string): Promise<void>
   updateMcpServer(serverName: string, config: Partial<MCPServerConfig>): Promise<void>
@@ -1601,19 +1757,46 @@ export interface IMCPPresenter {
   getAllResources(): Promise<Array<ResourceListEntry & { client: { name: string; icon: string } }>>
   getPrompt(prompt: PromptListEntry, args?: Record<string, unknown>): Promise<unknown>
   readResource(resource: ResourceListEntry): Promise<Resource>
-  callTool(request: MCPToolCall): Promise<{ content: string; rawData: MCPToolResponse }>
+  callTool(
+    request: MCPToolCall,
+    options?: {
+      onProgress?: (update: {
+        kind: 'subagent_orchestrator'
+        toolCallId: string
+        responseMarkdown: string
+        progressJson: string
+      }) => void
+      signal?: AbortSignal
+    }
+  ): Promise<{ content: string; rawData: MCPToolResponse }>
+  preCheckToolPermission?(request: MCPToolCall): Promise<{
+    needsPermission: true
+    toolName: string
+    serverName: string
+    permissionType: 'read' | 'write' | 'all' | 'command'
+    description: string
+    command?: string
+    commandSignature?: string
+    commandInfo?: {
+      command: string
+      riskLevel: 'low' | 'medium' | 'high' | 'critical'
+      suggestion: string
+      signature?: string
+      baseCommand?: string
+    }
+  } | null>
   handleSamplingRequest(request: McpSamplingRequestPayload): Promise<McpSamplingDecision>
   submitSamplingDecision(decision: McpSamplingDecision): Promise<void>
   cancelSamplingRequest(requestId: string, reason?: string): Promise<void>
   setMcpEnabled(enabled: boolean): Promise<void>
   getMcpEnabled(): Promise<boolean>
-  resetToDefaultServers(): Promise<void>
 
   // Permission management
   grantPermission(
     serverName: string,
     permissionType: 'read' | 'write' | 'all',
-    remember?: boolean
+    remember?: boolean,
+    conversationId?: string
   ): Promise<void>
   // NPM Registry management methods
   getNpmRegistryStatus?(): Promise<{
@@ -1707,7 +1890,13 @@ export interface ISyncPresenter {
   importFromSync(
     backupFileName: string,
     importMode?: ImportMode
-  ): Promise<{ success: boolean; message: string; count?: number }>
+  ): Promise<{
+    success: boolean
+    message: string
+    count?: number
+    sourceDbType?: 'agent' | 'chat'
+    importedSessions?: number
+  }>
   checkSyncFolder(): Promise<{ exists: boolean; path: string }>
   openSyncFolder(): Promise<void>
 

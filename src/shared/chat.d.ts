@@ -91,8 +91,8 @@ export type AssistantMessageBlock = {
     | 'tool_call'
     | 'action'
     | 'image'
+    | 'audio'
     | 'artifact-thinking'
-    | 'mcp_ui_resource'
   id?: string
   content?: string
   extra?: AssistantMessageExtra
@@ -119,13 +119,6 @@ export type AssistantMessageBlock = {
       | 'application/vnd.ant.react'
     language?: string
   }
-  mcp_ui_resource?: {
-    uri: string
-    mimeType: 'text/html' | 'text/uri-list' | 'application/vnd.mcp-ui.remote-dom'
-    text?: string
-    blob?: string
-    _meta?: Record<string, unknown>
-  }
   tool_call?: {
     id?: string
     name?: string
@@ -135,7 +128,11 @@ export type AssistantMessageBlock = {
     server_icons?: string
     server_description?: string
   }
-  action_type?: 'tool_call_permission' | 'maximum_tool_calls_reached' | 'rate_limit'
+  action_type?:
+    | 'tool_call_permission'
+    | 'maximum_tool_calls_reached'
+    | 'rate_limit'
+    | 'question_request'
   image_data?: {
     data: string
     mimeType: string
@@ -169,6 +166,21 @@ export type AssistantMessageExtra = Record<string, string | number | object[] | 
   permissionRequest?: string
   commandInfo?: string
   rememberable?: boolean
+  questionHeader?: string
+  questionText?: string
+  questionOptions?:
+    | Array<{
+        label: string
+        description?: string
+      }>
+    | string
+  questionMultiple?: boolean
+  questionCustom?: boolean
+  questionResolution?: 'asked' | 'replied' | 'rejected'
+  answerText?: string
+  answerMessageId?: string
+  subagentProgress?: string
+  subagentFinal?: string
 }
 // Search-related message block types
 export type SearchBlock = {

@@ -14,5 +14,10 @@
   "settings-prompt": "مدیریت پرامپت‌ها",
   "settings-mcp-market": "بازار MCP",
   "settings-acp": "نماینده ACP",
-  "settings-skills": "Skills"
+  "settings-skills": "Skills",
+  "settings-notifications-hooks": "هوک‌ها",
+  "settings-dashboard": "داشبورد",
+  "settings-environments": "محیط‌ها",
+  "settings-remote": "کنترل از راه دور",
+  "settings-deepchat-agents": "ایجنت‌های DeepChat"
 }

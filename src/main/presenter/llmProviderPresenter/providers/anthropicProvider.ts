@@ -11,82 +11,120 @@ import {
 import { createStreamEvent } from '@shared/types/core/llm-events'
 import { BaseLLMProvider, SUMMARY_TITLES_PROMPT } from '../baseProvider'
 import Anthropic from '@anthropic-ai/sdk'
-import { presenter } from '@/presenter'
-import { Usage } from '@anthropic-ai/sdk/resources'
 import { proxyConfig } from '../../proxyConfig'
 import { ProxyAgent } from 'undici'
+import type { Usage } from '@anthropic-ai/sdk/resources'
+import type { ProviderMcpRuntimePort } from '../runtimePorts'
+import {
+  applyAnthropicExplicitCacheBreakpoint,
+  applyAnthropicTopLevelCacheControl,
+  resolvePromptCachePlan
+} from '../promptCacheStrategy'
 
-const OAUTH_MODEL_LIST = {
-  data: [
-    {
-      created_at: '2025-11-01T00:00:00Z',
-      display_name: 'Claude Opus 4.5',
-      id: 'claude-opus-4-5-20251101',
-      type: 'model'
-    },
-    {
-      created_at: '2025-09-29T00:00:00Z',
-      display_name: 'Claude Sonnet 4.5',
-      id: 'claude-sonnet-4-5-20250929',
-      type: 'model'
-    },
-    {
-      created_at: '2025-09-29T00:00:00Z',
-      display_name: 'Claude Opus 4.1',
-      id: 'claude-opus-4-1-20250805',
-      type: 'model'
-    },
-    {
-      created_at: '2025-05-14T00:00:00Z',
-      display_name: 'Claude Sonnet 4',
-      id: 'claude-sonnet-4-20250514',
-      type: 'model'
-    },
-    {
-      created_at: '2025-05-14T00:00:00Z',
-      display_name: 'Claude Opus 4',
-      id: 'claude-opus-4-20250514',
-      type: 'model'
-    },
-    {
-      created_at: '2025-02-19T00:00:00Z',
-      display_name: 'Claude 3.7 Sonnet',
-      id: 'claude-3-7-sonnet-20250219',
-      type: 'model'
-    },
-    {
-      created_at: '2024-10-22T00:00:00Z',
-      display_name: 'Claude 3.5 Sonnet',
-      id: 'claude-3-5-sonnet-20241022',
-      type: 'model'
-    },
-    {
-      created_at: '2024-10-22T00:00:00Z',
-      display_name: 'Claude 3.5 Haiku',
-      id: 'claude-3-5-haiku-20241022',
-      type: 'model'
-    },
-    {
-      created_at: '2024-06-20T00:00:00Z',
-      display_name: 'Claude 3.5 Sonnet (Legacy)',
-      id: 'claude-3-5-sonnet-20240620',
-      type: 'model'
-    }
-  ],
-  first_id: 'claude-opus-4-5-20251101',
-  has_more: false,
-  last_id: 'claude-3-5-sonnet-20240620'
+type CacheAwareAnthropicUsage = Usage & {
+  cache_read_input_tokens?: number
+  cache_creation_input_tokens?: number
+  cacheReadInputTokens?: number
+  cacheWriteInputTokens?: number
+}
+
+function getAnthropicUsageNumber(
+  usage: CacheAwareAnthropicUsage | undefined,
+  snakeKey: 'cache_read_input_tokens' | 'cache_creation_input_tokens',
+  camelKey: 'cacheReadInputTokens' | 'cacheWriteInputTokens'
+): number {
+  const value = usage?.[snakeKey] ?? usage?.[camelKey]
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0
+}
+
+function buildAnthropicUsageSnapshot(usage: CacheAwareAnthropicUsage | undefined): {
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+  cached_tokens?: number
+  cache_write_tokens?: number
+} | null {
+  if (!usage) {
+    return null
+  }
+
+  const uncachedInputTokens =
+    typeof usage.input_tokens === 'number' && Number.isFinite(usage.input_tokens)
+      ? usage.input_tokens
+      : 0
+  const completionTokens =
+    typeof usage.output_tokens === 'number' && Number.isFinite(usage.output_tokens)
+      ? usage.output_tokens
+      : 0
+  const cachedTokens = getAnthropicUsageNumber(
+    usage,
+    'cache_read_input_tokens',
+    'cacheReadInputTokens'
+  )
+  const cacheWriteTokens = getAnthropicUsageNumber(
+    usage,
+    'cache_creation_input_tokens',
+    'cacheWriteInputTokens'
+  )
+  const promptTokens = uncachedInputTokens + cachedTokens + cacheWriteTokens
+
+  return {
+    prompt_tokens: promptTokens,
+    completion_tokens: completionTokens,
+    total_tokens: promptTokens + completionTokens,
+    ...(cachedTokens > 0 ? { cached_tokens: cachedTokens } : {}),
+    ...(cacheWriteTokens > 0 ? { cache_write_tokens: cacheWriteTokens } : {})
+  }
 }
 
 export class AnthropicProvider extends BaseLLMProvider {
   private anthropic!: Anthropic
-  private oauthToken?: string
-  private isOAuthMode = false
   private defaultModel = 'claude-sonnet-4-5-20250929'
 
-  constructor(provider: LLM_PROVIDER, configPresenter: IConfigPresenter) {
-    super(provider, configPresenter)
+  constructor(
+    provider: LLM_PROVIDER,
+    configPresenter: IConfigPresenter,
+    mcpRuntime?: ProviderMcpRuntimePort
+  ) {
+    super(provider, configPresenter, mcpRuntime)
     this.init()
+  }
+
+  private buildAnthropicEndpoint(): string {
+    const baseUrl = (this.provider.baseUrl || 'https://api.anthropic.com').replace(/\/+$/, '')
+    return `${baseUrl}/v1/messages`
+  }
+
+  private buildAnthropicApiKeyHeaders(): Record<string, string> {
+    return {
+      'Content-Type': 'application/json',
+      'anthropic-version': '2023-06-01',
+      'x-api-key': this.provider.apiKey || process.env.ANTHROPIC_API_KEY || 'MISSING_API_KEY'
+    }
+  }
+
+  private applyPromptCache<T extends Record<string, unknown>>(
+    requestParams: T,
+    modelId: string,
+    messages: Anthropic.MessageParam[],
+    conversationId?: string
+  ): T {
+    const plan = resolvePromptCachePlan({
+      providerId: this.provider.id,
+      apiType: 'anthropic',
+      modelId,
+      messages: messages as unknown[],
+      conversationId
+    })
+    const nextRequestParams =
+      plan.mode === 'anthropic_explicit'
+        ? {
+            ...requestParams,
+            messages: applyAnthropicExplicitCacheBreakpoint(messages, plan)
+          }
+        : requestParams
+
+    return applyAnthropicTopLevelCacheControl(nextRequestParams, plan)
   }
 
   public onProxyResolved(): void {
@@ -96,80 +134,27 @@ export class AnthropicProvider extends BaseLLMProvider {
   protected async init() {
     if (this.provider.enable) {
       try {
-        let apiKey: string | null = null
-        this.isOAuthMode = false
-        this.oauthToken = undefined
-
-        // Determine authentication method based on provider configuration
-        if (this.provider.authMode === 'oauth') {
-          // OAuth mode: prioritize OAuth token
-          try {
-            const oauthToken = await presenter.oauthPresenter.getAnthropicAccessToken()
-            if (oauthToken) {
-              this.oauthToken = oauthToken
-              this.isOAuthMode = true
-              console.log('[Anthropic Provider] Using OAuth token for authentication')
-            } else {
-              console.warn('[Anthropic Provider] OAuth mode selected but no OAuth token available')
-            }
-          } catch (error) {
-            console.log('[Anthropic Provider] Failed to get OAuth token:', error)
-          }
-        } else {
-          // API Key mode (default): prioritize API key
-          apiKey = this.provider.apiKey || process.env.ANTHROPIC_API_KEY || null
-          if (apiKey) {
-            console.log('[Anthropic Provider] Using API key for authentication')
-          }
-        }
-
-        // Fallback mechanism
-        if (!this.isOAuthMode && !apiKey) {
-          if (this.provider.authMode === 'oauth') {
-            // Fallback to API key if OAuth fails
-            apiKey = this.provider.apiKey || process.env.ANTHROPIC_API_KEY || null
-            if (apiKey) {
-              console.log('[Anthropic Provider] OAuth failed, falling back to API key')
-            }
-          } else {
-            // Fallback to OAuth if API key not available
-            try {
-              const oauthToken = await presenter.oauthPresenter.getAnthropicAccessToken()
-              if (oauthToken) {
-                this.oauthToken = oauthToken
-                this.isOAuthMode = true
-                console.log('[Anthropic Provider] API key not available, using OAuth token')
-              }
-            } catch (error) {
-              console.log('[Anthropic Provider] Failed to get OAuth token as fallback:', error)
-            }
-          }
-        }
-
-        if (!this.isOAuthMode && !apiKey) {
-          console.warn('[Anthropic Provider] No API key or OAuth token available')
+        const apiKey = this.provider.apiKey || process.env.ANTHROPIC_API_KEY || null
+        if (!apiKey) {
+          console.warn('[Anthropic Provider] No API key available')
           return
         }
 
-        // Initialize SDK only for API Key mode
-        if (!this.isOAuthMode && apiKey) {
-          // Get proxy configuration
-          const proxyUrl = proxyConfig.getProxyUrl()
-          const fetchOptions: { dispatcher?: ProxyAgent } = {}
+        const proxyUrl = proxyConfig.getProxyUrl()
+        const fetchOptions: { dispatcher?: ProxyAgent } = {}
 
-          if (proxyUrl) {
-            console.log(`[Anthropic Provider] Using proxy: ${proxyUrl}`)
-            const proxyAgent = new ProxyAgent(proxyUrl)
-            fetchOptions.dispatcher = proxyAgent
-          }
-
-          this.anthropic = new Anthropic({
-            apiKey: apiKey,
-            baseURL: this.provider.baseUrl || 'https://api.anthropic.com',
-            defaultHeaders: this.defaultHeaders,
-            fetchOptions
-          })
+        if (proxyUrl) {
+          console.log('[Anthropic Provider] Proxy enabled')
+          const proxyAgent = new ProxyAgent(proxyUrl)
+          fetchOptions.dispatcher = proxyAgent
         }
+
+        this.anthropic = new Anthropic({
+          apiKey,
+          baseURL: this.provider.baseUrl || 'https://api.anthropic.com',
+          defaultHeaders: this.defaultHeaders,
+          fetchOptions
+        })
 
         await super.init()
       } catch (error) {
@@ -180,15 +165,7 @@ export class AnthropicProvider extends BaseLLMProvider {
 
   protected async fetchProviderModels(): Promise<MODEL_META[]> {
     try {
-      let models: any
-
-      if (this.isOAuthMode) {
-        // OAuth mode: use predefined model list to avoid API calls
-        models = OAUTH_MODEL_LIST
-      } else {
-        // API Key mode: use SDK
-        models = await this.anthropic.models.list()
-      }
+      const models = await this.anthropic.models.list()
 
       // 引入getModelConfig函数
       if (models && models.data && Array.isArray(models.data)) {
@@ -245,75 +222,17 @@ export class AnthropicProvider extends BaseLLMProvider {
     return dbModels
   }
 
-  /**
-   * Make OAuth authenticated HTTP request to Anthropic API
-   */
-  private async makeOAuthRequest(path: string, method: 'GET' | 'POST', body?: any): Promise<any> {
-    if (!this.oauthToken) {
-      throw new Error('No OAuth token available')
-    }
-
-    const baseUrl = 'https://api.anthropic.com'
-    const url = baseUrl + path
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'anthropic-version': '2023-06-01',
-      'anthropic-beta':
-        'oauth-2025-04-20,claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14',
-      Authorization: `Bearer ${this.oauthToken}`
-    }
-
-    // Get proxy configuration
-    const proxyUrl = proxyConfig.getProxyUrl()
-    const fetchOptions: RequestInit = {
-      method,
-      headers,
-      ...(body && { body: JSON.stringify(body) })
-    }
-
-    if (proxyUrl) {
-      const proxyAgent = new ProxyAgent(proxyUrl)
-      // @ts-ignore - dispatcher is valid for undici-based fetch
-      fetchOptions.dispatcher = proxyAgent
-    }
-
-    const response = await fetch(url, fetchOptions)
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`OAuth API request failed: ${response.status} ${errorText}`)
-    }
-
-    return await response.json()
-  }
-
   public async check(): Promise<{ isOk: boolean; errorMsg: string | null }> {
     try {
-      if (this.isOAuthMode) {
-        if (!this.oauthToken) {
-          return { isOk: false, errorMsg: 'OAuth token not available' }
-        }
-
-        // OAuth mode: use direct HTTP request with fixed system message
-        await this.makeOAuthRequest('/v1/messages', 'POST', {
-          model: this.defaultModel,
-          max_tokens: 10,
-          system: "You are Claude Code, Anthropic's official CLI for Claude.",
-          messages: [{ role: 'user', content: 'Hello' }]
-        })
-      } else {
-        if (!this.anthropic) {
-          return { isOk: false, errorMsg: 'Anthropic SDK not initialized' }
-        }
-
-        // API Key mode: use SDK
-        await this.anthropic.messages.create({
-          model: this.defaultModel,
-          max_tokens: 10,
-          messages: [{ role: 'user', content: 'Hello' }]
-        })
+      if (!this.anthropic) {
+        return { isOk: false, errorMsg: 'Anthropic SDK not initialized' }
       }
+
+      await this.anthropic.messages.create({
+        model: this.defaultModel,
+        max_tokens: 10,
+        messages: [{ role: 'user', content: 'Hello' }]
+      })
 
       return { isOk: true, errorMsg: null }
     } catch (error: unknown) {
@@ -597,129 +516,6 @@ export class AnthropicProvider extends BaseLLMProvider {
     }
   }
 
-  /**
-   * Format messages for OAuth mode
-   * Converts system messages to user messages and handles special formatting
-   */
-  private formatMessagesForOAuth(messages: ChatMessage[]): any[] {
-    const result: any[] = []
-    let originalSystemContent = ''
-
-    // Extract original system message content
-    for (const msg of messages) {
-      if (msg.role === 'system') {
-        originalSystemContent +=
-          (typeof msg.content === 'string'
-            ? msg.content
-            : msg.content && Array.isArray(msg.content)
-              ? msg.content
-                  .filter((c) => c.type === 'text')
-                  .map((c) => c.text || '')
-                  .join('\n')
-              : '') + '\n'
-      }
-    }
-
-    // Add original system message as first user message if exists
-    if (originalSystemContent.trim()) {
-      result.push({
-        role: 'user',
-        content: originalSystemContent.trim()
-      })
-    }
-
-    // Process non-system messages
-    for (const msg of messages) {
-      if (msg.role === 'system') {
-        continue // Skip system messages, already converted above
-      }
-
-      if (msg.role === 'user' || msg.role === 'assistant') {
-        const content: any[] = []
-
-        if (typeof msg.content === 'string') {
-          // Only add non-empty text content
-          if (msg.content.trim()) {
-            content.push({
-              type: 'text',
-              text: msg.content
-            })
-          }
-        } else if (Array.isArray(msg.content)) {
-          for (const item of msg.content) {
-            if (item.type === 'text') {
-              // Only add non-empty text content
-              const textContent = item.text || ''
-              if (textContent.trim()) {
-                content.push({
-                  type: 'text',
-                  text: textContent
-                })
-              }
-            } else if (item.type === 'image_url') {
-              content.push({
-                type: 'image',
-                source: item.image_url?.url.startsWith('data:image')
-                  ? {
-                      type: 'base64',
-                      data: item.image_url.url.split(',')[1],
-                      media_type: item.image_url.url.split(';')[0].split(':')[1] as any
-                    }
-                  : { type: 'url', url: item.image_url?.url }
-              })
-            }
-          }
-        }
-
-        // Handle tool calls for assistant messages
-        if (msg.role === 'assistant' && 'tool_calls' in msg && Array.isArray(msg.tool_calls)) {
-          for (const toolCall of msg.tool_calls as any[]) {
-            try {
-              content.push({
-                type: 'tool_use',
-                id: toolCall.id,
-                name: toolCall.function.name,
-                input: JSON.parse(toolCall.function.arguments || '{}')
-              })
-            } catch (e) {
-              console.error('Error processing tool_call in OAuth mode:', e)
-            }
-          }
-        }
-
-        // Only add message if it has content, otherwise add a placeholder
-        if (content.length === 0) {
-          // Add a placeholder for empty messages to prevent API errors
-          content.push({
-            type: 'text',
-            text: '[Empty message]'
-          })
-        }
-
-        result.push({
-          role: msg.role,
-          content: content.length === 1 && content[0].type === 'text' ? content[0].text : content
-        })
-      } else if (msg.role === 'tool') {
-        // Handle tool result messages
-        const toolContent =
-          typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
-        result.push({
-          role: 'user',
-          content: [
-            {
-              type: 'tool_result',
-              tool_use_id: (msg as any).tool_call_id || '',
-              content: toolContent || '[Empty tool result]'
-            }
-          ]
-        })
-      }
-    }
-
-    return result
-  }
-
   public async summaryTitles(messages: ChatMessage[], modelId: string): Promise<string> {
     const prompt = `${SUMMARY_TITLES_PROMPT}\n\n${messages.map((m) => `${m.role}: ${m.content}`).join('\n')}`
     const response = await this.generateText(prompt, modelId, 0.3, 50)
@@ -734,46 +530,29 @@ export class AnthropicProvider extends BaseLLMProvider {
     maxTokens?: number
   ): Promise<LLMResponse> {
     try {
-      let requestParams: any
-      let response: any
+      const formattedMessages = this.formatMessages(messages)
 
-      if (this.isOAuthMode) {
-        if (!this.oauthToken) {
-          throw new Error('OAuth token is not available')
-        }
-
-        // OAuth mode: special message handling
-        const oauthMessages = this.formatMessagesForOAuth(messages)
-        requestParams = {
-          model: modelId,
-          max_tokens: maxTokens || 1024,
-          temperature: temperature ?? 0.7,
-          system: "You are Claude Code, Anthropic's official CLI for Claude.",
-          messages: oauthMessages
-        }
-
-        response = await this.makeOAuthRequest('/v1/messages', 'POST', requestParams)
-      } else {
-        // API Key mode: use standard formatting
-        const formattedMessages = this.formatMessages(messages)
-
-        requestParams = {
-          model: modelId,
-          max_tokens: maxTokens || 1024,
-          temperature: temperature ?? 0.7,
-          messages: formattedMessages.messages
-        }
-
-        // 如果有系统消息，添加到请求参数中
-        if (formattedMessages.system) {
-          requestParams.system = formattedMessages.system
-        }
-
-        if (!this.anthropic) {
-          throw new Error('Anthropic client is not initialized')
-        }
-        response = await this.anthropic.messages.create(requestParams)
+      const requestParams: any = {
+        model: modelId,
+        max_tokens: maxTokens || 1024,
+        temperature: temperature ?? 0.7,
+        messages: formattedMessages.messages
       }
+
+      if (formattedMessages.system) {
+        requestParams.system = formattedMessages.system
+      }
+
+      const cachedRequestParams = this.applyPromptCache(
+        requestParams,
+        modelId,
+        formattedMessages.messages
+      )
+
+      if (!this.anthropic) {
+        throw new Error('Anthropic client is not initialized')
+      }
+      const response = await this.anthropic.messages.create(cachedRequestParams)
 
       const resultResp: LLMResponse = {
         content: ''
@@ -781,10 +560,13 @@ export class AnthropicProvider extends BaseLLMProvider {
 
       // 添加usage信息
       if (response.usage) {
+        const usageSnapshot = buildAnthropicUsageSnapshot(
+          response.usage as CacheAwareAnthropicUsage
+        )
         resultResp.totalUsage = {
-          prompt_tokens: response.usage.input_tokens,
-          completion_tokens: response.usage.output_tokens,
-          total_tokens: response.usage.input_tokens + response.usage.output_tokens
+          prompt_tokens: usageSnapshot?.prompt_tokens ?? 0,
+          completion_tokens: usageSnapshot?.completion_tokens ?? 0,
+          total_tokens: usageSnapshot?.total_tokens ?? 0
         }
       }
 
@@ -847,48 +629,27 @@ ${text}
     systemPrompt?: string
   ): Promise<LLMResponse> {
     try {
-      let requestParams: any
-      let response: any
-
-      if (this.isOAuthMode) {
-        if (!this.oauthToken) {
-          throw new Error('OAuth token is not available')
-        }
-
-        // OAuth mode: use fixed system message and prepend original system prompt to user message
-        let finalPrompt = prompt
-        if (systemPrompt) {
-          finalPrompt = `${systemPrompt}\n\n${prompt}`
-        }
-
-        requestParams = {
-          model: modelId,
-          max_tokens: maxTokens || 1024,
-          temperature: temperature ?? 0.7,
-          system: "You are Claude Code, Anthropic's official CLI for Claude.",
-          messages: [{ role: 'user', content: finalPrompt }]
-        }
-
-        response = await this.makeOAuthRequest('/v1/messages', 'POST', requestParams)
-      } else {
-        // API Key mode: use standard approach
-        requestParams = {
-          model: modelId,
-          max_tokens: maxTokens || 1024,
-          temperature: temperature ?? 0.7,
-          messages: [{ role: 'user' as const, content: [{ type: 'text' as const, text: prompt }] }]
-        }
-
-        // 如果提供了系统提示，添加到请求中
-        if (systemPrompt) {
-          requestParams.system = systemPrompt
-        }
-
-        if (!this.anthropic) {
-          throw new Error('Anthropic client is not initialized')
-        }
-        response = await this.anthropic.messages.create(requestParams)
+      const requestParams: any = {
+        model: modelId,
+        max_tokens: maxTokens || 1024,
+        temperature: temperature ?? 0.7,
+        messages: [{ role: 'user' as const, content: [{ type: 'text' as const, text: prompt }] }]
       }
+
+      if (systemPrompt) {
+        requestParams.system = systemPrompt
+      }
+
+      const cachedRequestParams = this.applyPromptCache(
+        requestParams,
+        modelId,
+        requestParams.messages
+      )
+
+      if (!this.anthropic) {
+        throw new Error('Anthropic client is not initialized')
+      }
+      const response = await this.anthropic.messages.create(cachedRequestParams)
 
       return {
         content: response.content
@@ -916,48 +677,27 @@ ${text}
 ${context}
 `
     try {
-      let requestParams: any
-      let response: any
-
-      if (this.isOAuthMode) {
-        if (!this.oauthToken) {
-          throw new Error('OAuth token is not available')
-        }
-
-        // OAuth mode: use fixed system message and prepend original system prompt to user message
-        let finalPrompt = prompt
-        if (systemPrompt) {
-          finalPrompt = `${systemPrompt}\n\n${prompt}`
-        }
-
-        requestParams = {
-          model: modelId,
-          max_tokens: maxTokens || 1024,
-          temperature: temperature ?? 0.7,
-          system: "You are Claude Code, Anthropic's official CLI for Claude.",
-          messages: [{ role: 'user', content: finalPrompt }]
-        }
-
-        response = await this.makeOAuthRequest('/v1/messages', 'POST', requestParams)
-      } else {
-        // API Key mode: use standard approach
-        requestParams = {
-          model: modelId,
-          max_tokens: maxTokens || 1024,
-          temperature: temperature ?? 0.7,
-          messages: [{ role: 'user' as const, content: [{ type: 'text' as const, text: prompt }] }]
-        }
-
-        // 如果提供了系统提示，添加到请求中
-        if (systemPrompt) {
-          requestParams.system = systemPrompt
-        }
-
-        if (!this.anthropic) {
-          throw new Error('Anthropic client is not initialized')
-        }
-        response = await this.anthropic.messages.create(requestParams)
+      const requestParams: any = {
+        model: modelId,
+        max_tokens: maxTokens || 1024,
+        temperature: temperature ?? 0.7,
+        messages: [{ role: 'user' as const, content: [{ type: 'text' as const, text: prompt }] }]
       }
+
+      if (systemPrompt) {
+        requestParams.system = systemPrompt
+      }
+
+      const cachedRequestParams = this.applyPromptCache(
+        requestParams,
+        modelId,
+        requestParams.messages
+      )
+
+      if (!this.anthropic) {
+        throw new Error('Anthropic client is not initialized')
+      }
+      const response = await this.anthropic.messages.create(cachedRequestParams)
 
       const suggestions = response.content
         .filter((block: any) => block.type === 'text')
@@ -987,12 +727,6 @@ ${context}
     if (!modelId) throw new Error('Model ID is required')
     console.log('modelConfig', modelConfig, modelId)
 
-    if (this.isOAuthMode) {
-      // OAuth mode: use custom streaming implementation
-      yield* this.coreStreamOAuth(messages, modelId, modelConfig, temperature, maxTokens, mcpTools)
-      return
-    }
-
     if (!this.anthropic) throw new Error('Anthropic client is not initialized')
     try {
       // 格式化消息
@@ -1001,7 +735,7 @@ ${context}
       // 将MCP工具转换为Anthropic工具格式
       const anthropicTools =
         mcpTools.length > 0
-          ? await presenter.mcpPresenter.mcpToolsToAnthropicTools(mcpTools, this.provider.id)
+          ? await this.mcpRuntime?.mcpToolsToAnthropicTools(mcpTools, this.provider.id)
           : undefined
 
       // 创建基本请求参数
@@ -1029,9 +763,20 @@ ${context}
         // @ts-ignore - 类型不匹配，但格式是正确的
         streamParams.tools = anthropicTools
       }
+      const cachedStreamParams = this.applyPromptCache(
+        streamParams as unknown as Record<string, unknown>,
+        modelId,
+        formattedMessagesObject.messages,
+        modelConfig.conversationId
+      ) as unknown as Anthropic.Messages.MessageCreateParamsStreaming
+      await this.emitRequestTrace(modelConfig, {
+        endpoint: this.buildAnthropicEndpoint(),
+        headers: this.buildAnthropicApiKeyHeaders(),
+        body: cachedStreamParams
+      })
       // console.log('streamParams', JSON.stringify(streamParams.messages))
       // 创建Anthropic流
-      const stream = await this.anthropic.messages.create(streamParams)
+      const stream = await this.anthropic.messages.create(cachedStreamParams)
 
       // 状态变量
       let accumulatedJson = ''
@@ -1187,205 +932,16 @@ ${context}
         }
       }
       if (usageMetadata) {
-        yield createStreamEvent.usage({
-          prompt_tokens: usageMetadata.input_tokens,
-          completion_tokens: usageMetadata.output_tokens,
-          total_tokens: usageMetadata.input_tokens + usageMetadata.output_tokens
-        })
+        const usageSnapshot = buildAnthropicUsageSnapshot(usageMetadata as CacheAwareAnthropicUsage)
+        if (usageSnapshot) {
+          yield createStreamEvent.usage(usageSnapshot)
+        }
       }
       // 发送停止事件
       yield createStreamEvent.stop(toolUseDetected ? 'tool_use' : 'complete')
     } catch (error) {
       console.error('Anthropic coreStream error:', error)
       yield createStreamEvent.error(error instanceof Error ? error.message : '未知错误')
-      yield createStreamEvent.stop('error')
-    }
-  }
-
-  /**
-   * OAuth mode streaming implementation
-   * Uses Server-Sent Events for streaming responses
-   */
-  async *coreStreamOAuth(
-    messages: ChatMessage[],
-    modelId: string,
-    _modelConfig: ModelConfig,
-    temperature: number,
-    maxTokens: number,
-    mcpTools: MCPToolDefinition[]
-  ): AsyncGenerator<LLMCoreStreamEvent> {
-    if (!this.oauthToken) {
-      throw new Error('OAuth token is not available')
-    }
-
-    try {
-      // OAuth mode: use special message formatting
-      const oauthMessages = this.formatMessagesForOAuth(messages)
-
-      // 将MCP工具转换为Anthropic工具格式
-      const anthropicTools =
-        mcpTools.length > 0
-          ? await presenter.mcpPresenter.mcpToolsToAnthropicTools(mcpTools, this.provider.id)
-          : undefined
-
-      // 创建基本请求参数
-      const streamParams: any = {
-        model: modelId,
-        max_tokens: maxTokens || 1024,
-        temperature: temperature ?? 0.7,
-        system: "You are Claude Code, Anthropic's official CLI for Claude.",
-        messages: oauthMessages,
-        stream: true
-      }
-
-      // 启用Claude 3.7模型的思考功能
-      if (modelId.includes('claude-3-7')) {
-        streamParams.thinking = { budget_tokens: 1024, type: 'enabled' }
-      }
-
-      // 添加工具参数
-      if (anthropicTools && anthropicTools.length > 0) {
-        streamParams.tools = anthropicTools
-      }
-
-      // Make streaming request
-      const baseUrl = 'https://api.anthropic.com'
-      const url = baseUrl + '/v1/messages'
-
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'anthropic-version': '2023-06-01',
-        'anthropic-beta':
-          'oauth-2025-04-20,claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14',
-        Authorization: `Bearer ${this.oauthToken}`,
-        Accept: 'text/event-stream'
-      }
-
-      // Get proxy configuration
-      const proxyUrl = proxyConfig.getProxyUrl()
-      const fetchOptions: RequestInit = {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(streamParams)
-      }
-
-      if (proxyUrl) {
-        const proxyAgent = new ProxyAgent(proxyUrl)
-        // @ts-ignore - dispatcher is valid for undici-based fetch
-        fetchOptions.dispatcher = proxyAgent
-      }
-
-      const response = await fetch(url, fetchOptions)
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`OAuth streaming request failed: ${response.status} ${errorText}`)
-      }
-
-      if (!response.body) {
-        throw new Error('No response body for streaming')
-      }
-
-      // Parse Server-Sent Events stream
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
-      let toolUseDetected = false
-      let currentToolId = ''
-      let currentToolName = ''
-      let accumulatedJson = ''
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-
-          buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split('\n')
-          buffer = lines.pop() || ''
-
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6)
-              if (data === '[DONE]') continue
-
-              try {
-                const chunk = JSON.parse(data)
-
-                // Handle different event types
-                if (
-                  chunk.type === 'content_block_start' &&
-                  chunk.content_block?.type === 'tool_use'
-                ) {
-                  toolUseDetected = true
-                  currentToolId = chunk.content_block.id || `anthropic-tool-${Date.now()}`
-                  currentToolName = chunk.content_block.name || ''
-                  accumulatedJson = ''
-
-                  if (currentToolName) {
-                    yield {
-                      type: 'tool_call_start',
-                      tool_call_id: currentToolId,
-                      tool_call_name: currentToolName
-                    }
-                  }
-                } else if (
-                  chunk.type === 'content_block_delta' &&
-                  chunk.delta?.type === 'input_json_delta'
-                ) {
-                  const partialJson = chunk.delta.partial_json
-                  if (partialJson) {
-                    accumulatedJson += partialJson
-                    yield {
-                      type: 'tool_call_chunk',
-                      tool_call_id: currentToolId,
-                      tool_call_arguments_chunk: partialJson
-                    }
-                  }
-                } else if (chunk.type === 'content_block_stop' && toolUseDetected) {
-                  if (accumulatedJson) {
-                    yield {
-                      type: 'tool_call_end',
-                      tool_call_id: currentToolId,
-                      tool_call_arguments_complete: accumulatedJson
-                    }
-                  }
-                  accumulatedJson = ''
-                } else if (
-                  chunk.type === 'content_block_delta' &&
-                  chunk.delta?.type === 'text_delta'
-                ) {
-                  const text = chunk.delta.text
-                  if (text) {
-                    yield {
-                      type: 'text',
-                      content: text
-                    }
-                  }
-                } else if (chunk.type === 'message_start' && chunk.message?.usage) {
-                  // Handle usage info if needed
-                } else if (chunk.type === 'message_delta' && chunk.usage) {
-                  yield createStreamEvent.usage({
-                    prompt_tokens: chunk.usage.input_tokens || 0,
-                    completion_tokens: chunk.usage.output_tokens || 0,
-                    total_tokens: (chunk.usage.input_tokens || 0) + (chunk.usage.output_tokens || 0)
-                  })
-                }
-              } catch (parseError) {
-                console.error('Failed to parse chunk:', parseError, data)
-              }
-            }
-          }
-        }
-      } finally {
-        reader.releaseLock()
-      }
-
-      // Send stop event
-      yield createStreamEvent.stop(toolUseDetected ? 'tool_use' : 'complete')
-    } catch (error) {
-      console.error('Anthropic OAuth coreStream error:', error)
-      yield createStreamEvent.error(error instanceof Error ? error.message : 'Unknown error')
       yield createStreamEvent.stop('error')
     }
   }

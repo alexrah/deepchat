@@ -34,7 +34,7 @@ export const DEFAULT_PROVIDERS: LLM_PROVIDER_BASE[] = [
   {
     id: 'qiniu',
     name: 'Qiniu',
-    apiType: 'openai',
+    apiType: 'openai-completions',
     apiKey: '',
     baseUrl: 'https://api.qnaigc.com/v1',
     enable: false,
@@ -80,7 +80,7 @@ export const DEFAULT_PROVIDERS: LLM_PROVIDER_BASE[] = [
   {
     id: 'ppio',
     name: 'PPIO',
-    apiType: 'openai',
+    apiType: 'openai-completions',
     apiKey: '',
     baseUrl: 'https://api.ppinfra.com/v3/openai',
     enable: false,
@@ -128,7 +128,7 @@ export const DEFAULT_PROVIDERS: LLM_PROVIDER_BASE[] = [
   {
     id: 'tokenflux',
     name: 'TokenFlux',
-    apiType: 'openai',
+    apiType: 'openai-completions',
     apiKey: '',
     baseUrl: 'https://tokenflux.ai/v1',
     enable: false,
@@ -144,7 +144,7 @@ export const DEFAULT_PROVIDERS: LLM_PROVIDER_BASE[] = [
   {
     id: 'burncloud',
     name: 'BurnCloud',
-    apiType: 'openai',
+    apiType: 'openai-completions',
     apiKey: '',
     baseUrl: 'https://ai.burncloud.com',
     enable: false,
@@ -218,6 +218,21 @@ export const DEFAULT_PROVIDERS: LLM_PROVIDER_BASE[] = [
     }
   },
   {
+    id: 'voiceai',
+    name: 'Voice.ai',
+    apiType: 'voiceai',
+    apiKey: '',
+    baseUrl: 'https://dev.voice.ai',
+    enable: false,
+    websites: {
+      official: 'https://voice.ai/',
+      apiKey: 'https://voice.ai/app/dashboard/developers',
+      docs: 'https://voice.ai/docs/introduction',
+      models: 'https://voice.ai/docs/api-reference/text-to-speech/list-voices',
+      defaultBaseUrl: 'https://dev.voice.ai'
+    }
+  },
+  {
     id: 'gemini',
     name: 'Gemini',
     apiType: 'gemini',
@@ -265,7 +280,7 @@ export const DEFAULT_PROVIDERS: LLM_PROVIDER_BASE[] = [
   {
     id: 'openrouter',
     name: 'OpenRouter',
-    apiType: 'openai',
+    apiType: 'openai-completions',
     apiKey: '',
     baseUrl: 'https://openrouter.ai/api/v1/',
     enable: false,
@@ -295,7 +310,7 @@ export const DEFAULT_PROVIDERS: LLM_PROVIDER_BASE[] = [
   {
     id: '302ai',
     name: '302.AI',
-    apiType: 'openai',
+    apiType: 'openai-completions',
     apiKey: '',
     baseUrl: 'https://api.302.ai/v1',
     enable: false,
@@ -355,7 +370,7 @@ export const DEFAULT_PROVIDERS: LLM_PROVIDER_BASE[] = [
   {
     id: 'github',
     name: 'GitHub Models',
-    apiType: 'openai',
+    apiType: 'openai-completions',
     apiKey: '',
     baseUrl: 'https://models.inference.ai.azure.com',
     enable: false,
@@ -461,7 +476,7 @@ export const DEFAULT_PROVIDERS: LLM_PROVIDER_BASE[] = [
   {
     id: 'moonshot',
     name: 'Moonshot',
-    apiType: 'openai',
+    apiType: 'openai-completions',
     apiKey: '',
     baseUrl: 'https://api.moonshot.cn/v1',
     enable: false,
@@ -613,7 +628,7 @@ export const DEFAULT_PROVIDERS: LLM_PROVIDER_BASE[] = [
   {
     id: 'aihubmix',
     name: 'AIHubMix',
-    apiType: 'openai',
+    apiType: 'openai-completions',
     apiKey: '',
     baseUrl: 'https://aihubmix.com/v1',
     enable: false,
@@ -658,7 +673,7 @@ export const DEFAULT_PROVIDERS: LLM_PROVIDER_BASE[] = [
   {
     id: 'hunyuan',
     name: 'Hunyuan',
-    apiType: 'openai',
+    apiType: 'openai-completions',
     apiKey: '',
     baseUrl: 'https://api.hunyuan.cloud.tencent.com/v1',
     enable: false,
@@ -688,7 +703,7 @@ export const DEFAULT_PROVIDERS: LLM_PROVIDER_BASE[] = [
   {
     id: 'azure-openai',
     name: 'Azure OpenAI',
-    apiType: 'openai',
+    apiType: 'openai-completions',
     apiKey: '',
     baseUrl: '',
     enable: false,
@@ -705,7 +720,7 @@ export const DEFAULT_PROVIDERS: LLM_PROVIDER_BASE[] = [
   {
     id: 'modelscope',
     name: 'ModelScope',
-    apiType: 'openai',
+    apiType: 'openai-completions',
     apiKey: '',
     baseUrl: 'https://api-inference.modelscope.cn/v1/',
     enable: false,
@@ -735,7 +750,7 @@ export const DEFAULT_PROVIDERS: LLM_PROVIDER_BASE[] = [
   {
     id: 'xiaomi',
     name: 'Xiaomi',
-    apiType: 'openai',
+    apiType: 'openai-completions',
     apiKey: '',
     baseUrl: 'https://api.xiaomimimo.com/v1',
     enable: false,
@@ -760,6 +775,21 @@ export const DEFAULT_PROVIDERS: LLM_PROVIDER_BASE[] = [
       docs: 'https://o3.fan',
       models: 'https://o3.fan/info/models',
       defaultBaseUrl: 'https://api.o3.fan/v1'
+    }
+  },
+  {
+    id: 'novita',
+    name: 'Novita AI',
+    apiType: 'openai-completions',
+    apiKey: '',
+    baseUrl: 'https://api.novita.ai/openai',
+    enable: false,
+    websites: {
+      official: 'https://novita.ai/',
+      apiKey: 'https://novita.ai/',
+      docs: 'https://novita.ai/docs',
+      models: 'https://novita.ai/models',
+      defaultBaseUrl: 'https://api.novita.ai/openai'
     }
   }
 ]

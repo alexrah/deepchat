@@ -18,6 +18,7 @@
   "cancel": "キャンセル",
   "confirm": "確認",
   "close": "閉じる",
+  "open": "開く",
   "next": "次へ",
   "back": "戻る",
   "error": {
@@ -42,7 +43,8 @@
     "error502": "ゲートウェイエラー：後で再試行してください",
     "error503": "サービス不可：後で再試行してください",
     "error504": "タイムアウト：ネットワーク設定を確認してください",
-    "operationFailed": "操作に失敗しました"
+    "operationFailed": "操作に失敗しました",
+    "invalidQuestionRequest": "無効な質問リクエスト"
   },
   "resetDataConfirmTitle": "すべてのデータをリセットしますか？",
   "resetDataConfirmDescription": "すべてのデータがデフォルト設定にリセットされます。この操作は元に戻せません。",
@@ -77,7 +79,6 @@
   "save": "保存",
   "clear": "クリア",
   "saved": "保存",
-  "newTab": "新しいタブ",
   "unknownError": "不明なエラー",
   "testing": "テスト中",
   "saving": "保存中",
@@ -91,9 +92,25 @@
     "back": "戻る",
     "forward": "進む",
     "reload": "再読み込み",
+    "addressLabel": "アドレスバー",
     "addressPlaceholder": "URLを入力",
     "enterUrlDescription": "上のアドレスバーに URL を入力して Web サイトにアクセスします",
     "enterUrlToStart": "URLを入力してアクセスを開始してください",
     "name": "よブラウザ"
+  },
+  "size": {
+    "bytes": "{count} バイト"
+  },
+  "time": {
+    "today": "今日",
+    "yesterday": "昨日",
+    "lastWeek": "先週",
+    "older": "以前"
+  },
+  "project": {
+    "select": "プロジェクトを選択",
+    "none": "プロジェクトなし",
+    "recent": "最近のプロジェクト",
+    "openFolder": "フォルダを開く..."
   }
 }

@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useProviderStore } from '@/stores/providerStore'
+import { useAgentStore } from '@/stores/ui/agent'
+import AcpAgentIcon from './AcpAgentIcon.vue'
 import cherryinColorIcon from '@/assets/llm-icons/cherryin-color.png?url'
 import adobeColorIcon from '@/assets/llm-icons/adobe-color.svg?url'
 import zeaburColorIcon from '@/assets/llm-icons/zeabur-color.svg?url'
@@ -32,6 +34,7 @@ import deepseekColorIcon from '@/assets/llm-icons/deepseek-color.svg?url'
 import openaiColorIcon from '@/assets/llm-icons/openai.svg?url'
 import ollamaColorIcon from '@/assets/llm-icons/ollama.svg?url'
 import doubaoColorIcon from '@/assets/llm-icons/doubao-color.svg?url'
+import dimcodeColorIcon from '@/assets/llm-icons/dimcode.svg?url'
 import minimaxColorIcon from '@/assets/llm-icons/minimax-color.svg?url'
 import fireworksColorIcon from '@/assets/llm-icons/fireworks-color.svg?url'
 import zerooneColorIcon from '@/assets/llm-icons/zeroone.svg?url'
@@ -68,12 +71,18 @@ import zenmuxColorIcon from '@/assets/llm-icons/zenmux-color.svg?url'
 import burncloudColorIcon from '@/assets/llm-icons/burncloud-color.svg?url'
 import xiaomiColorIcon from '@/assets/llm-icons/xiaomi.png?url'
 import o3fanColorIcon from '@/assets/llm-icons/o3-fan.png?url'
+import voiceAiColorIcon from '@/assets/llm-icons/voiceai.svg?url'
+import novitaAiIcon from '@/assets/llm-icons/novitaai.svg?url'
 
 // 导入所有图标
 const icons = {
+  kimi: moonshotColorIcon,
   'kimi-cli': moonshotColorIcon,
+  'claude-acp': claudeColorIcon,
   'claude-code-acp': claudeColorIcon,
   'codex-acp': openaiColorIcon,
+  dimcode: dimcodeColorIcon,
+  'dimcode-acp': dimcodeColorIcon,
   o3fan: o3fanColorIcon,
   cherryin: cherryinColorIcon,
   modelscope: modelscopeColorIcon,
@@ -148,6 +157,10 @@ const icons = {
   zenmux: zenmuxColorIcon,
   burncloud: burncloudColorIcon,
   xiaomi: xiaomiColorIcon,
+  voiceai: voiceAiColorIcon,
+  novita: novitaAiIcon,
+  novitaai: novitaAiIcon,
+  'novita.ai': novitaAiIcon,
   default: defaultIcon
 }
 
@@ -163,6 +176,8 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const providerStore = useProviderStore()
+const agentStore = useAgentStore()
+const iconLoadFailed = ref(false)
 
 const provider = computed(() => {
   if (!props.modelId) return undefined
@@ -192,36 +207,87 @@ const iconKey = computed(() => {
   return 'default'
 })
 
+const dynamicAgentIcon = computed(() => {
+  if (!props.modelId) {
+    return ''
+  }
+  return agentStore.agents.find((agent) => agent.id === props.modelId)?.icon ?? ''
+})
+
+const useDynamicAcpRegistryIcon = computed(() => {
+  const icon = dynamicAgentIcon.value.trim()
+  return icon.startsWith('https://cdn.agentclientprotocol.com/registry/') && icon.endsWith('.svg')
+})
+
+watch(
+  () => [props.modelId, dynamicAgentIcon.value],
+  () => {
+    iconLoadFailed.value = false
+  }
+)
+
+// Monochrome icon URLs that need inversion in dark mode
+const monoIconUrls = new Set([
+  openaiColorIcon,
+  dimcodeColorIcon,
+  ollamaColorIcon,
+  zerooneColorIcon,
+  xaiColorIcon,
+  vercelColorIcon,
+  viggleColorIcon,
+  sunoColorIcon,
+  syncColorIcon,
+  rwkvColorIcon,
+  moonshotColorIcon,
+  openrouterColorIcon,
+  githubColorIcon,
+  qiniuIcon,
+  grokColorIcon,
+  groqColorIcon,
+  metaColorIcon,
+  lmstudioColorIcon,
+  _302aiIcon,
+  awsBedrockIcon,
+  voiceAiColorIcon,
+  novitaAiIcon
+])
+
 const invert = computed(() => {
+  if (dynamicAgentIcon.value && !iconLoadFailed.value) {
+    return false
+  }
   if (!props.isDark) {
     return false
   }
-  const checkTargets = [props.modelId.toLowerCase()]
-  if (provider.value?.apiType) {
-    checkTargets.push(provider.value.apiType.toLowerCase())
-  }
-  const invertKeywords = [
-    'openai',
-    'openai-responses',
-    'openrouter',
-    'ollama',
-    'grok',
-    'groq',
-    'github',
-    'moonshot',
-    'lmstudio',
-    'aws-bedrock'
-  ]
-
-  return checkTargets.some((target) => invertKeywords.some((keyword) => target.includes(keyword)))
+  return monoIconUrls.has(icons[iconKey.value])
 })
+
+const resolvedIconSrc = computed(() =>
+  dynamicAgentIcon.value && !iconLoadFailed.value ? dynamicAgentIcon.value : icons[iconKey.value]
+)
+
+const handleIconError = () => {
+  if (dynamicAgentIcon.value) {
+    iconLoadFailed.value = true
+  }
+}
 </script>
 
 <template>
+  <AcpAgentIcon
+    v-if="useDynamicAcpRegistryIcon"
+    :agent-id="props.modelId"
+    :icon="dynamicAgentIcon"
+    :alt="props.modelId"
+    :fallback-text="props.modelId"
+    :custom-class="customClass"
+  />
   <img
-    :src="icons[iconKey]"
+    v-else
+    :src="resolvedIconSrc"
     :alt="iconKey"
     :class="[customClass, { invert }, invert ? 'opacity-50' : '']"
+    @error="handleIconError"
   />
 </template>
 

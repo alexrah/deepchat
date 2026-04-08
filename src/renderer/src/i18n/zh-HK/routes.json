@@ -14,5 +14,10 @@
   "settings-mcp-market": "MCP市場",
   "playground": "Playground 實驗室",
   "settings-acp": "ACP Agent",
-  "settings-skills": "skills設置"
+  "settings-skills": "Skills設置",
+  "settings-notifications-hooks": "Hooks",
+  "settings-dashboard": "資料看板",
+  "settings-environments": "目錄環境",
+  "settings-remote": "遠端",
+  "settings-deepchat-agents": "DeepChat 智能體"
 }

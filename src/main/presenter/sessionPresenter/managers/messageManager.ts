@@ -354,6 +354,14 @@ export class MessageManager implements IMessageManager {
     return this.convertToMessage(sqliteMessage)
   }
 
+  async getLastAssistantMessage(conversationId: string): Promise<Message | null> {
+    const sqliteMessage = await this.sqlitePresenter.getLastAssistantMessage(conversationId)
+    if (!sqliteMessage) {
+      return null
+    }
+    return this.convertToMessage(sqliteMessage)
+  }
+
   async clearAllMessages(conversationId: string): Promise<void> {
     await this.sqlitePresenter.deleteAllMessagesInConversation(conversationId)
   }
@@ -376,10 +384,27 @@ export class MessageManager implements IMessageManager {
 
         // 处理每个未完成的消息
         for (const message of pendingMessages) {
+          const blocks = Array.isArray(message.content) ? message.content : []
+          const hasQuestionRequest = blocks.some(
+            (block) => block.type === 'action' && block.action_type === 'question_request'
+          )
+          if (hasQuestionRequest) {
+            await this.updateMessageStatus(message.id, 'sent')
+            continue
+          }
           await this.handleMessageError(message.id, 'common.error.sessionInterrupted')
         }
       }
     } catch (error) {
+      if (
+        error instanceof Error &&
+        /no such table:\s*(conversations|messages|message_attachments)/i.test(error.message)
+      ) {
+        console.info(
+          '[MessageManager] Skip legacy unfinished message initialization: legacy tables not found.'
+        )
+        return
+      }
       console.error('初始化未完成消息失败:', error)
     }
   }

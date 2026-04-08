@@ -7,6 +7,8 @@ import monacoEditorPlugin from 'vite-plugin-monaco-editor-esm'
 import path from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
 
+const isCustomElement = (tag: string) =>
+  tag === 'voice-agent-widget' || tag.startsWith('ui-resource-renderer')
 
 export default defineConfig({
   main: {
@@ -54,7 +56,9 @@ export default defineConfig({
       )
     },
     optimizeDeps: {
+      exclude: ['markstream-vue', 'stream-monaco'],
       include: [
+        '@antv/infographic',
         'monaco-editor',
         'axios'
       ]
@@ -62,7 +66,6 @@ export default defineConfig({
     resolve: {
       alias: {
         '@': resolve('src/renderer/src'),
-        '@shell': resolve('src/renderer/shell'),
         '@shared': resolve('src/shared'),
         "@shadcn": resolve('src/shadcn'),
         vue: 'vue/dist/vue.esm-bundler.js'
@@ -82,8 +85,7 @@ export default defineConfig({
       vue({
         template: {
           compilerOptions: {
-            // 将所有带短横线的标签名都视为自定义元素
-            isCustomElement: (tag) => tag.startsWith('ui-resource-renderer')
+            isCustomElement
           }
         }
       }),
@@ -91,7 +93,7 @@ export default defineConfig({
       vueDevTools(
         {
           appendTo:'src/renderer/src/main.ts'
-          // appendTo:'src/renderer/shell/main.ts'
+          // appendTo:'src/renderer/browser/main.ts'
         }
       )
     ],
@@ -106,8 +108,6 @@ export default defineConfig({
       cssCodeSplit: false,
       rollupOptions: {
         input: {
-          shell: resolve('src/renderer/shell/index.html'),
-          shellTooltipOverlay: resolve('src/renderer/shell/tooltip-overlay/index.html'),
           index: resolve('src/renderer/index.html'),
           floating: resolve('src/renderer/floating/index.html'),
           splash: resolve('src/renderer/splash/index.html'),

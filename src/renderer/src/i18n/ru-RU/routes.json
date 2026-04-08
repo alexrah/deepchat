@@ -14,5 +14,10 @@
   "settings-prompt": "Управление промптами",
   "settings-mcp-market": "MCP Market",
   "settings-acp": "ACP-агент",
-  "settings-skills": "Skills"
+  "settings-skills": "Skills",
+  "settings-notifications-hooks": "Хуки",
+  "settings-dashboard": "Панель",
+  "settings-environments": "Окружения",
+  "settings-remote": "Удалённое управление",
+  "settings-deepchat-agents": "Агенты DeepChat"
 }

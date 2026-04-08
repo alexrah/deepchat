@@ -15,14 +15,14 @@
 - Preview: `pnpm start`.
 - Type check: `pnpm run typecheck` (or `typecheck:node` / `typecheck:web`).
 - Lint/format: `pnpm run lint`, `pnpm run format`, `pnpm run format:check`.
-- After completing a feature, always run `pnpm run format` and `pnpm run lint` to keep formatting and lint status clean.
+- After completing a feature, always run `pnpm run format`, `pnpm run i18n` and `pnpm run lint` to keep formatting and lint status clean.
 - Test: `pnpm test`, `test:main`, `test:renderer`, `test:coverage`, `test:watch`, `test:ui`.
 - Build: `pnpm run build` then `build:win|mac|linux` (add `:x64|:arm64`).
 
 ## Coding Style & Naming Conventions
 - TypeScript + Vue 3 Composition API; Pinia for state; Tailwind for styles.
 - i18n: all user-facing strings use vue-i18n keys in `src/renderer/src/i18n`.
-- Prettier: single quotes, no semicolons, width 100. Run `pnpm run format`.
+- Oxfmt: single quotes, no semicolons, width 100. Run `pnpm run format`.
 - OxLint for JS/TS; hooks run `lint-staged` and `typecheck`.
 - Names: Vue components PascalCase (`ChatInput.vue`); variables/functions `camelCase`; types/classes `PascalCase`; constants `SCREAMING_SNAKE_CASE`.
 

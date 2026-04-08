@@ -18,6 +18,7 @@
   "cancel": "ביטול",
   "confirm": "אישור",
   "close": "סגור",
+  "open": "פתח",
   "next": "הבא",
   "back": "חזור",
   "error": {
@@ -42,7 +43,8 @@
     "error502": "שגיאת Gateway, ייתכן שהשירות אינו יציב, אנא נסה שוב מאוחר יותר",
     "error503": "השירות אינו זמין, ייתכן שהשירות אינו יציב, אנא נסה שוב מאוחר יותר",
     "error504": "הבקשה הסתיימה (Timeout), ייתכן שהשירות אינו יציב או שיש בעיות רשת, אנא בדוק את הגדרות הפרוקסי ונסה שוב",
-    "operationFailed": "הפעולה נכשלה"
+    "operationFailed": "הפעולה נכשלה",
+    "invalidQuestionRequest": "בקשת שאלה לא תקינה"
   },
   "resetDataConfirmTitle": "לאפס את כל הנתונים?",
   "resetDataConfirmDescription": "פעולה זו תאפס את כל הנתונים שלך להגדרות ברירת המחדל. לא ניתן לבטל פעולה זו.",
@@ -77,7 +79,6 @@
   "save": "שמור",
   "clear": "נקה",
   "saved": "נשמר",
-  "newTab": "כרטיסייה חדשה",
   "unknownError": "שגיאה לא ידועה",
   "testing": "בדיקה בתהליך",
   "saving": "שומר",
@@ -91,9 +92,25 @@
     "back": "Back",
     "forward": "Forward",
     "reload": "Reload",
+    "addressLabel": "שורת הכתובת",
     "addressPlaceholder": "Enter a URL",
     "enterUrlDescription": "הזן את כתובת האתר בשורת הכתובת למעלה כדי לגשת לאתר",
     "enterUrlToStart": "הזן את כתובת האתר כדי להתחיל לבקר",
     "name": "יו דפדפן"
+  },
+  "size": {
+    "bytes": "{count} בתים"
+  },
+  "time": {
+    "today": "היום",
+    "yesterday": "אתמול",
+    "lastWeek": "השבוע שעבר",
+    "older": "ישן יותר"
+  },
+  "project": {
+    "select": "בחר פרויקט",
+    "none": "ללא פרויקט",
+    "recent": "פרויקטים אחרונים",
+    "openFolder": "פתח תיקייה..."
   }
 }

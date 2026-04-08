@@ -6,14 +6,24 @@ import {
   IConfigPresenter
 } from '@shared/presenter'
 import { ModelType } from '@shared/model'
+import {
+  resolveModelContextLength,
+  resolveModelFunctionCall,
+  resolveModelMaxTokens
+} from '@shared/modelConfigDefaults'
 import { OpenAICompatibleProvider } from './openAICompatibleProvider'
 import { providerDbLoader } from '../../configPresenter/providerDbLoader'
 import { modelCapabilities } from '../../configPresenter/modelCapabilities'
+import type { ProviderMcpRuntimePort } from '../runtimePorts'
 
 export class ZhipuProvider extends OpenAICompatibleProvider {
-  constructor(provider: LLM_PROVIDER, configPresenter: IConfigPresenter) {
+  constructor(
+    provider: LLM_PROVIDER,
+    configPresenter: IConfigPresenter,
+    mcpRuntime?: ProviderMcpRuntimePort
+  ) {
     // Initialize Zhipu AI model configuration
-    super(provider, configPresenter)
+    super(provider, configPresenter, mcpRuntime)
   }
 
   protected async fetchOpenAIModels(): Promise<MODEL_META[]> {
@@ -36,10 +46,10 @@ export class ZhipuProvider extends OpenAICompatibleProvider {
         group: 'zhipu',
         providerId: this.provider.id,
         isCustom: false,
-        contextLength: model.limit?.context ?? 8192,
-        maxTokens: model.limit?.output ?? 4096,
+        contextLength: resolveModelContextLength(model.limit?.context),
+        maxTokens: resolveModelMaxTokens(model.limit?.output),
         vision: hasImageInput,
-        functionCall: Boolean(model.tool_call),
+        functionCall: resolveModelFunctionCall(model.tool_call),
         reasoning: Boolean(model.reasoning?.supported),
         enableSearch: Boolean(model.search?.supported),
         type: modelType

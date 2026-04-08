@@ -20,10 +20,10 @@ export const CONFIG_EVENTS = {
   SYNC_SETTINGS_CHANGED: 'config:sync-settings-changed',
   SEARCH_ENGINES_UPDATED: 'config:search-engines-updated',
   SEARCH_PREVIEW_CHANGED: 'config:search-preview-changed',
+  AUTO_SCROLL_CHANGED: 'config:auto-scroll-changed',
   NOTIFICATIONS_CHANGED: 'config:notifications-changed',
   CONTENT_PROTECTION_CHANGED: 'config:content-protection-changed',
   LANGUAGE_CHANGED: 'config:language-changed', // 新增：语言变更事件
-  SOUND_ENABLED_CHANGED: 'config:sound-enabled-changed', // 新增：声音启用状态变更事件
   COPY_WITH_COT_CHANGED: 'config:copy-with-cot-enabled-changed',
   TRACE_DEBUG_CHANGED: 'config:trace-debug-changed', // Trace 调试功能开关变更事件
   FONT_FAMILY_CHANGED: 'config:font-family-changed',
@@ -31,7 +31,9 @@ export const CONFIG_EVENTS = {
   THEME_CHANGED: 'config:theme-changed',
   FONT_SIZE_CHANGED: 'config:font-size-changed',
   DEFAULT_SYSTEM_PROMPT_CHANGED: 'config:default-system-prompt-changed',
-  CUSTOM_PROMPTS_CHANGED: 'config:custom-prompts-changed'
+  CUSTOM_PROMPTS_CHANGED: 'config:custom-prompts-changed',
+  DEFAULT_PROJECT_PATH_CHANGED: 'config:default-project-path-changed',
+  AGENTS_CHANGED: 'config:agents-changed'
 }
 
 // 会话相关事件
@@ -48,7 +50,8 @@ export const CONVERSATION_EVENTS = {
 export const STREAM_EVENTS = {
   RESPONSE: 'stream:response', // 替代 stream-response
   END: 'stream:end', // 替代 stream-end
-  ERROR: 'stream:error' // 替代 stream-error
+  ERROR: 'stream:error', // 替代 stream-error
+  PERMISSION_UPDATED: 'stream:permission-updated' // 权限状态更新，通知前端刷新UI
 }
 
 // 应用更新相关事件
@@ -64,12 +67,19 @@ export const WINDOW_EVENTS = {
   READY_TO_SHOW: 'window:ready-to-show', // 替代 main-window-ready-to-show
   FORCE_QUIT_APP: 'window:force-quit-app', // 替代 force-quit-app
   APP_FOCUS: 'app:focus',
-  APP_BLUR: 'app:blur'
+  APP_BLUR: 'app:blur',
+  WINDOW_MAXIMIZED: 'window:maximized',
+  WINDOW_UNMAXIMIZED: 'window:unmaximized',
+  WINDOW_ENTER_FULL_SCREEN: 'window:enter-full-screen',
+  WINDOW_LEAVE_FULL_SCREEN: 'window:leave-full-screen'
 }
 
 // Settings related events
 export const SETTINGS_EVENTS = {
-  NAVIGATE: 'settings:navigate'
+  READY: 'settings:ready',
+  NAVIGATE: 'settings:navigate',
+  CHECK_FOR_UPDATES: 'settings:check-for-updates',
+  PROVIDER_INSTALL: 'settings:provider-install'
 }
 
 // ollama 相关事件
@@ -86,11 +96,6 @@ export const MCP_EVENTS = {
   SAMPLING_REQUEST: 'mcp:sampling-request',
   SAMPLING_DECISION: 'mcp:sampling-decision',
   SAMPLING_CANCELLED: 'mcp:sampling-cancelled'
-}
-
-// 新增会议相关事件
-export const MEETING_EVENTS = {
-  INSTRUCTION: 'mcp:meeting-instruction' // 监听来自主进程的指令
 }
 
 // 同步相关事件
@@ -136,6 +141,7 @@ export const SHORTCUT_EVENTS = {
   ZOOM_OUT: 'shortcut:zoom-out',
   ZOOM_RESUME: 'shortcut:zoom-resume',
   CREATE_NEW_CONVERSATION: 'shortcut:create-new-conversation',
+  TOGGLE_SPOTLIGHT: 'shortcut:toggle-spotlight',
   GO_SETTINGS: 'shortcut:go-settings',
   CLEAN_CHAT_HISTORY: 'shortcut:clean-chat-history',
   DELETE_CONVERSATION: 'shortcut:delete-conversation'
@@ -158,12 +164,12 @@ export const TAB_EVENTS = {
 
 // Yo Browser 相关事件
 export const YO_BROWSER_EVENTS = {
-  TAB_CREATED: 'yo-browser:tab-created',
-  TAB_CLOSED: 'yo-browser:tab-closed',
-  TAB_ACTIVATED: 'yo-browser:tab-activated',
-  TAB_NAVIGATED: 'yo-browser:tab-navigated',
-  TAB_UPDATED: 'yo-browser:tab-updated',
-  TAB_COUNT_CHANGED: 'yo-browser:tab-count-changed',
+  OPEN_REQUESTED: 'yo-browser:open-requested',
+  WINDOW_CREATED: 'yo-browser:window-created',
+  WINDOW_UPDATED: 'yo-browser:window-updated',
+  WINDOW_CLOSED: 'yo-browser:window-closed',
+  WINDOW_FOCUSED: 'yo-browser:window-focused',
+  WINDOW_COUNT_CHANGED: 'yo-browser:window-count-changed',
   WINDOW_VISIBILITY_CHANGED: 'yo-browser:window-visibility-changed'
 }
 
@@ -181,9 +187,22 @@ export const SKILL_SYNC_EVENTS = {
 // 悬浮按钮相关事件
 export const FLOATING_BUTTON_EVENTS = {
   CLICKED: 'floating-button:clicked', // 悬浮按钮被点击
+  RIGHT_CLICKED: 'floating-button:right-clicked', // 悬浮按钮被右键点击
   VISIBILITY_CHANGED: 'floating-button:visibility-changed', // 悬浮按钮显示状态改变
   POSITION_CHANGED: 'floating-button:position-changed', // 悬浮按钮位置改变
-  ENABLED_CHANGED: 'floating-button:enabled-changed' // 悬浮按钮启用状态改变
+  ENABLED_CHANGED: 'floating-button:enabled-changed', // 悬浮按钮启用状态改变
+  SNAPSHOT_REQUEST: 'floating-button:snapshot-request',
+  SNAPSHOT_UPDATED: 'floating-button:snapshot-updated',
+  LANGUAGE_REQUEST: 'floating-button:language-request',
+  LANGUAGE_CHANGED: 'floating-button:language-changed',
+  THEME_REQUEST: 'floating-button:theme-request',
+  THEME_CHANGED: 'floating-button:theme-changed',
+  TOGGLE_EXPANDED: 'floating-button:toggle-expanded',
+  SET_EXPANDED: 'floating-button:set-expanded',
+  OPEN_SESSION: 'floating-button:open-session',
+  DRAG_START: 'floating-button:drag-start',
+  DRAG_MOVE: 'floating-button:drag-move',
+  DRAG_END: 'floating-button:drag-end'
 }
 
 // Dialog相关事件
@@ -197,6 +216,16 @@ export const RAG_EVENTS = {
   FILE_UPDATED: 'rag:file-updated', // 文件状态更新
   FILE_PROGRESS: 'rag:file-progress' // 文件进度更新
 }
+// New agent session events
+export const SESSION_EVENTS = {
+  LIST_UPDATED: 'session:list-updated',
+  ACTIVATED: 'session:activated',
+  DEACTIVATED: 'session:deactivated',
+  STATUS_CHANGED: 'session:status-changed',
+  COMPACTION_UPDATED: 'session:compaction-updated',
+  PENDING_INPUTS_UPDATED: 'session:pending-inputs-updated'
+}
+
 // 系统相关事件
 export const SYSTEM_EVENTS = {
   SYSTEM_THEME_UPDATED: 'system:theme-updated'
@@ -204,14 +233,15 @@ export const SYSTEM_EVENTS = {
 
 // Workspace events
 export const WORKSPACE_EVENTS = {
-  PLAN_UPDATED: 'workspace:plan-updated', // Plan entries updated
-  TERMINAL_OUTPUT: 'workspace:terminal-output', // Terminal snippet update
-  FILES_CHANGED: 'workspace:files-changed' // File tree changed
+  INVALIDATED: 'workspace:files-changed', // Workspace invalidation event
+  FILES_CHANGED: 'workspace:files-changed' // Legacy alias
 }
 
 // ACP-specific workspace events
 export const ACP_WORKSPACE_EVENTS = {
-  SESSION_MODES_READY: 'acp-workspace:session-modes-ready' // Session modes available
+  SESSION_MODES_READY: 'acp-workspace:session-modes-ready', // Session modes available
+  SESSION_COMMANDS_READY: 'acp-workspace:session-commands-ready', // Session commands available
+  SESSION_CONFIG_OPTIONS_READY: 'acp-workspace:session-config-options-ready' // Session config options available
 }
 
 export const ACP_DEBUG_EVENTS = {
