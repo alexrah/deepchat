@@ -6,7 +6,6 @@ out
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
-.vscode
 .idea
 build/linuxarm.json
 build/linuxx64.json
@@ -20,3 +19,8 @@ runtime/**/*
 .env.local
 .npmrc
 .claude/settings.local.json
+# chunkhound
+.chunkhound
+.chunkhound.json
+.mcp.json
+
